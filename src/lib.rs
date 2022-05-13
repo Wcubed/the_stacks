@@ -1,8 +1,10 @@
-use bevy::input::mouse::MouseMotion;
 use bevy::math::const_vec2;
 use bevy::prelude::*;
 
 const CARD_SIZE: Vec2 = const_vec2!([100.0, 130.0]);
+const CARD_COLOR: Color = Color::rgb(0.25, 0.25, 0.75);
+/// TODO (Wybe 2022-05-14): Convert this into an overlay somehow, instead of changing the card sprite color.
+const CARD_DRAG_COLOR: Color = Color::rgb(0.30, 0.30, 0.80);
 
 pub struct TheStacksPlugin;
 
@@ -21,15 +23,16 @@ pub struct Card {
 fn setup(mut commands: Commands) {
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
 
-    spawn_card(&mut commands);
-    spawn_card(&mut commands);
+    for _ in 0..10 {
+        spawn_card(&mut commands);
+    }
 }
 
 fn spawn_card(commands: &mut Commands) {
     commands
         .spawn_bundle(SpriteBundle {
             sprite: Sprite {
-                color: Color::rgb(0.25, 0.25, 0.75),
+                color: CARD_COLOR,
                 ..default()
             },
             transform: Transform::from_scale(CARD_SIZE.extend(1.0)),
@@ -42,7 +45,7 @@ fn card_mouse_drag_system(
     mouse_button: Res<Input<MouseButton>>,
     windows: Res<Windows>,
     camera_query: Query<(&Camera, &GlobalTransform), Without<Card>>,
-    mut card_query: Query<(&mut GlobalTransform, &mut Card)>,
+    mut card_query: Query<(&mut GlobalTransform, &mut Sprite, &mut Card)>,
 ) {
     let primary_window = windows.get_primary().expect("No primary window!");
     let (camera, camera_transform) = camera_query.single();
@@ -52,20 +55,24 @@ fn card_mouse_drag_system(
             window_pos_to_world_pos(camera, camera_transform, primary_window, mouse_window_pos);
 
         if mouse_button.just_pressed(MouseButton::Left) {
-            for (transform, mut card) in card_query.iter_mut() {
+            for (transform, mut sprite, mut card) in card_query.iter_mut() {
                 // Assumes sprite size is 1x1, and that the transform.scale provides the actual size.
                 if let Some(pos) = in_bounds(&transform, mouse_world_pos) {
                     card.relative_drag_position = Some(pos);
+                    sprite.color = CARD_DRAG_COLOR;
+                    // Can only drag one card at a time.
+                    break;
                 }
             }
         }
         if mouse_button.just_released(MouseButton::Left) {
-            for (_, mut card) in card_query.iter_mut() {
+            for (_, mut sprite, mut card) in card_query.iter_mut() {
                 card.relative_drag_position = None;
+                sprite.color = CARD_COLOR;
             }
         }
 
-        for (mut transform, card) in card_query.iter_mut() {
+        for (mut transform, _, card) in card_query.iter_mut() {
             if let Some(pos) = card.relative_drag_position {
                 transform.translation = (mouse_world_pos - pos).extend(1.0);
             }
