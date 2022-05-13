@@ -2,6 +2,9 @@ use bevy::math::const_vec2;
 use bevy::prelude::*;
 
 const CARD_SIZE: Vec2 = const_vec2!([100.0, 130.0]);
+const CARD_Z: f32 = 1.0;
+const CARD_DRAG_Z: f32 = 2.0;
+
 const CARD_COLOR: Color = Color::rgb(0.25, 0.25, 0.75);
 /// TODO (Wybe 2022-05-14): Convert this into an overlay somehow, instead of changing the card sprite color.
 const CARD_DRAG_COLOR: Color = Color::rgb(0.30, 0.30, 0.80);
@@ -66,15 +69,17 @@ fn card_mouse_drag_system(
             }
         }
         if mouse_button.just_released(MouseButton::Left) {
-            for (_, mut sprite, mut card) in card_query.iter_mut() {
+            for (mut transform, mut sprite, mut card) in card_query.iter_mut() {
                 card.relative_drag_position = None;
                 sprite.color = CARD_COLOR;
+
+                transform.translation.z = CARD_Z;
             }
         }
 
         for (mut transform, _, card) in card_query.iter_mut() {
             if let Some(pos) = card.relative_drag_position {
-                transform.translation = (mouse_world_pos - pos).extend(1.0);
+                transform.translation = (mouse_world_pos - pos).extend(CARD_DRAG_Z);
             }
         }
     }
