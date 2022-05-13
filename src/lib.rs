@@ -1,3 +1,4 @@
+use bevy::input::mouse::MouseMotion;
 use bevy::math::const_vec2;
 use bevy::prelude::*;
 
@@ -12,8 +13,10 @@ impl Plugin for TheStacksPlugin {
     }
 }
 
-#[derive(Component)]
-pub struct Card;
+#[derive(Component, Default)]
+pub struct Card {
+    relative_drag_position: Option<Vec2>,
+}
 
 fn setup(mut commands: Commands) {
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
@@ -32,14 +35,14 @@ fn spawn_card(commands: &mut Commands) {
             transform: Transform::from_scale(CARD_SIZE.extend(1.0)),
             ..default()
         })
-        .insert(Card);
+        .insert(Card::default());
 }
 
 fn card_mouse_drag_system(
     mouse_button: Res<Input<MouseButton>>,
     windows: Res<Windows>,
-    camera_query: Query<(&Camera, &GlobalTransform)>,
-    card_query: Query<&GlobalTransform, With<Card>>,
+    camera_query: Query<(&Camera, &GlobalTransform), Without<Card>>,
+    mut card_query: Query<(&mut GlobalTransform, &mut Card)>,
 ) {
     let primary_window = windows.get_primary().expect("No primary window!");
     let (camera, camera_transform) = camera_query.single();
@@ -49,17 +52,23 @@ fn card_mouse_drag_system(
             window_pos_to_world_pos(camera, camera_transform, primary_window, mouse_window_pos);
 
         if mouse_button.just_pressed(MouseButton::Left) {
-            info!("{}", mouse_world_pos);
-            for transform in card_query.iter() {
-                // TODO (Wybe 2022-05-14): Transform mouse position to local coordinates.
-                // Assumes sprite size is 1x1.
-                if in_bounds(transform, &mouse_world_pos) {
-                    info!("In bounds!");
+            for (transform, mut card) in card_query.iter_mut() {
+                // Assumes sprite size is 1x1, and that the transform.scale provides the actual size.
+                if let Some(pos) = in_bounds(&transform, mouse_world_pos) {
+                    card.relative_drag_position = Some(pos);
                 }
             }
         }
         if mouse_button.just_released(MouseButton::Left) {
-            info!("Left mouse button released");
+            for (_, mut card) in card_query.iter_mut() {
+                card.relative_drag_position = None;
+            }
+        }
+
+        for (mut transform, card) in card_query.iter_mut() {
+            if let Some(pos) = card.relative_drag_position {
+                transform.translation = (mouse_world_pos - pos).extend(1.0);
+            }
         }
     }
 }
@@ -78,13 +87,21 @@ fn window_pos_to_world_pos(
         .truncate()
 }
 
-fn in_bounds(transform: &GlobalTransform, position: &Vec2) -> bool {
+/// Returns where in the bounds the position is located.
+/// `None` if the position is not in bounds.
+fn in_bounds(transform: &GlobalTransform, position: Vec2) -> Option<Vec2> {
     // TODO (Wybe 2022-05-14): Take into account rotation.
-    let half_size = transform.scale / 2.0;
-    let translation = transform.translation;
+    let half_size = transform.scale.truncate() / 2.0;
 
-    position.x >= translation.x - half_size.x
-        && position.x <= translation.x + half_size.x
-        && position.y >= translation.y - half_size.y
-        && position.y <= translation.y + half_size.y
+    let pos_in_bounds = position - transform.translation.truncate();
+
+    if pos_in_bounds.x >= -half_size.x
+        && pos_in_bounds.x <= half_size.x
+        && pos_in_bounds.y >= -half_size.y
+        && pos_in_bounds.y <= half_size.y
+    {
+        Some(pos_in_bounds)
+    } else {
+        None
+    }
 }
