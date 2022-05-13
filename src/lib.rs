@@ -8,6 +8,7 @@ const CARD_DRAG_Z: f32 = 2.0;
 const CARD_COLOR: Color = Color::rgb(0.25, 0.25, 0.75);
 /// TODO (Wybe 2022-05-14): Convert this into an overlay somehow, instead of changing the card sprite color.
 const CARD_DRAG_COLOR: Color = Color::rgb(0.30, 0.30, 0.80);
+const CARD_HOVER_COLOR: Color = Color::rgb(0.35, 0.35, 0.85);
 
 pub struct TheStacksPlugin;
 
@@ -57,27 +58,27 @@ fn card_mouse_drag_system(
         let mouse_world_pos =
             window_pos_to_world_pos(camera, camera_transform, primary_window, mouse_window_pos);
 
-        if mouse_button.just_pressed(MouseButton::Left) {
-            for (transform, mut sprite, mut card) in card_query.iter_mut() {
-                // Assumes sprite size is 1x1, and that the transform.scale provides the actual size.
-                if let Some(pos) = in_bounds(&transform, mouse_world_pos) {
+        for (mut transform, mut sprite, mut card) in card_query.iter_mut() {
+            // Assumes sprite size is 1x1, and that the transform.scale provides the actual size.
+            if let Some(pos) = in_bounds(&transform, mouse_world_pos) {
+                if mouse_button.just_pressed(MouseButton::Left) {
                     card.relative_drag_position = Some(pos);
                     sprite.color = CARD_DRAG_COLOR;
                     // Can only drag one card at a time.
+                    // TODO (Wybe 2022-05-14): Make this not break out of a loop that does more stuff.
                     break;
+                } else if !mouse_button.pressed(MouseButton::Left) {
+                    sprite.color = CARD_HOVER_COLOR;
                 }
-            }
-        }
-        if mouse_button.just_released(MouseButton::Left) {
-            for (mut transform, mut sprite, mut card) in card_query.iter_mut() {
-                card.relative_drag_position = None;
+            } else if card.relative_drag_position.is_none() {
                 sprite.color = CARD_COLOR;
+            }
 
+            if mouse_button.just_released(MouseButton::Left) {
+                card.relative_drag_position = None;
                 transform.translation.z = CARD_Z;
             }
-        }
 
-        for (mut transform, _, card) in card_query.iter_mut() {
             if let Some(pos) = card.relative_drag_position {
                 transform.translation = (mouse_world_pos - pos).extend(CARD_DRAG_Z);
             }
