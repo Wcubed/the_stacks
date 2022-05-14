@@ -1,7 +1,9 @@
-use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
+use bevy::input::mouse::{MouseMotion, MouseScrollUnit, MouseWheel};
 use bevy::prelude::*;
 use bevy::render::camera::Camera2d;
+use bevy::utils::tracing::Event;
 use bevy_asset_loader::{AssetCollection, AssetLoader};
+use std::thread::current;
 
 /// Mouse wheels are less precise than touchpads, so we scale the zoom when using a scroll wheel.
 const MOUSE_WHEEL_ZOOM_FACTOR: f32 = 0.1;
@@ -44,6 +46,7 @@ impl Plugin for TheStacksPlugin {
             .add_system_set(
                 SystemSet::on_update(GameState::Run)
                     .with_system(camera_zoom_system)
+                    .with_system(camera_drag_system)
                     .with_system(card_mouse_drag_system)
                     .with_system(card_overlap_nudging_system),
             );
@@ -125,11 +128,46 @@ fn camera_zoom_system(
     }
 }
 
+fn camera_drag_system(
+    mut camera_query: Query<(&mut Transform, &OrthographicProjection), With<Camera2d>>,
+    windows: Res<Windows>,
+    mouse_button: Res<Input<MouseButton>>,
+    mut last_pos: Local<Option<Vec2>>,
+    dragged_card_query: Query<&CardRelativeDragPosition>,
+) {
+    if !dragged_card_query.is_empty() {
+        // The user is dragging cards, so we can't be dragging the camera.
+        return;
+    }
+    let window = windows.get_primary().expect("No primary window!");
+    let current_pos = match window.cursor_position() {
+        Some(current_pos) => current_pos,
+        None => return,
+    };
+    let delta = current_pos - last_pos.unwrap_or(current_pos);
+
+    if mouse_button.pressed(MouseButton::Left) {
+        let window_size = Vec2::new(window.width(), window.height());
+
+        let (mut camera_transform, projection) = camera_query.single_mut();
+
+        let scaling = Vec2::new(
+            window.width() / (projection.right - projection.left),
+            window.height() / (projection.top - projection.bottom),
+        ) * projection.scale
+            * camera_transform.scale.truncate();
+
+        camera_transform.translation -= (delta * scaling).extend(0.);
+    }
+
+    *last_pos = Some(current_pos);
+}
+
 fn card_mouse_drag_system(
     mut commands: Commands,
     mouse_button: Res<Input<MouseButton>>,
     windows: Res<Windows>,
-    camera_query: Query<(&Camera, &GlobalTransform), (With<Camera2d>, Without<Card>)>,
+    camera_query: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
     mut card_query: Query<
         (
             Entity,
