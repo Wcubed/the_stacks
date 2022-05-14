@@ -1,4 +1,6 @@
 use bevy::prelude::*;
+use bevy::render::render_resource::TextureDimension;
+use bevy_asset_loader::{AssetCollection, AssetLoader};
 
 const CARD_Z: f32 = 1.0;
 const CARD_DRAG_Z: f32 = 2.0;
@@ -9,23 +11,27 @@ const CARD_DRAG_COLOR: Color = Color::rgb(0.30, 0.30, 0.80);
 const CARD_HOVER_COLOR: Color = Color::rgb(0.35, 0.35, 0.85);
 const CARD_BORDER_COLOR: Color = Color::BLACK;
 
-const ASSET_LOAD_STAGE: &str = "asset_load";
-const WORLD_SETUP_STAGE: &str = "world_setup";
+#[derive(Clone, Eq, PartialEq, Debug, Hash)]
+enum GameState {
+    AssetLoading,
+    Run,
+}
 
 pub struct TheStacksPlugin;
 
 impl Plugin for TheStacksPlugin {
     fn build(&self, app: &mut App) {
+        AssetLoader::new(GameState::AssetLoading)
+            .continue_to_state(GameState::Run)
+            .with_collection::<CardImages>()
+            .build(app);
+
         app.insert_resource(Msaa { samples: 4 })
-            .add_startup_stage_after(
-                StartupStage::Startup,
-                ASSET_LOAD_STAGE,
-                SystemStage::parallel(),
-            )
-            .add_startup_system_to_stage(ASSET_LOAD_STAGE, load_assets)
-            .add_startup_stage_after(ASSET_LOAD_STAGE, WORLD_SETUP_STAGE, SystemStage::parallel())
-            .add_startup_system_to_stage(WORLD_SETUP_STAGE, world_setup)
-            .add_system(card_mouse_drag_system);
+            .add_state(GameState::AssetLoading)
+            .add_system_set(SystemSet::on_enter(GameState::Run).with_system(world_setup))
+            .add_system_set(
+                SystemSet::on_update(GameState::Run).with_system(card_mouse_drag_system),
+            );
     }
 }
 
@@ -34,20 +40,12 @@ pub struct Card {
     relative_drag_position: Option<Vec2>,
 }
 
+#[derive(AssetCollection)]
 pub struct CardImages {
+    #[asset(path = "vector_images/card_background.png")]
     background: Handle<Image>,
+    #[asset(path = "vector_images/card_border.png")]
     border: Handle<Image>,
-}
-
-fn load_assets(mut commands: Commands, asset_server: Res<AssetServer>) {
-    // Enable hot reloading.
-    asset_server.watch_for_changes().unwrap();
-
-    let background = asset_server.load("vector_images/card_background.png");
-    let border = asset_server.load("vector_images/card_border.png");
-
-    commands.insert_resource(CardImages { background, border });
-    info!("Here!")
 }
 
 fn world_setup(mut commands: Commands, card_images: Res<CardImages>) {
