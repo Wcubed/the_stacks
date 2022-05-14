@@ -1,3 +1,4 @@
+use bevy::math::{const_vec2, vec2};
 use bevy::prelude::*;
 use bevy::render::camera::Camera2d;
 use bevy_asset_loader::AssetCollection;
@@ -7,6 +8,8 @@ const CARD_DRAG_Z: f32 = 2.0;
 
 /// Max amount of display units a card moves per second if it overlaps with another.
 const CARD_OVERLAP_MOVEMENT: f32 = 1000.0;
+/// Spacing that cards want to keep between each other.
+const CARD_OVERLAP_SPACING: Vec2 = const_vec2!([10.0, 10.0]);
 
 /// Tiny change in Z position, used to put sprites "in front" of other sprites.
 const DELTA_Z: f32 = 0.001;
@@ -138,12 +141,14 @@ pub fn card_overlap_nudging_system(
     while let Some([(global_transform1, mut transform1), (global_transform2, mut transform2)]) =
         combinations.fetch_next()
     {
+        let card_wanted_space = card_visual_size.0 + CARD_OVERLAP_SPACING;
+
         // TODO (Wybe 2022-05-14): Should we account for scaling and rotation?
         if let Some(total_movement) = get_movement_to_no_longer_overlap(
             global_transform1.translation.truncate(),
-            card_visual_size.0,
+            card_wanted_space,
             global_transform2.translation.truncate(),
-            card_visual_size.0,
+            card_wanted_space,
         ) {
             let max_movement_this_frame = CARD_OVERLAP_MOVEMENT * time.delta_seconds();
 
