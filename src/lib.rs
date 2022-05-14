@@ -5,6 +5,9 @@ use bevy_asset_loader::{AssetCollection, AssetLoader};
 const CARD_Z: f32 = 1.0;
 const CARD_DRAG_Z: f32 = 2.0;
 
+/// Tiny change in Z position, used to put sprites "in front" of other sprites.
+const DELTA_Z: f32 = 0.001;
+
 const CARD_COLOR: Color = Color::rgb(0.25, 0.25, 0.75);
 /// TODO (Wybe 2022-05-14): Convert this into an overlay somehow, instead of changing the card sprite color.
 const CARD_DRAG_COLOR: Color = Color::rgb(0.30, 0.30, 0.80);
@@ -40,6 +43,9 @@ pub struct Card {
     relative_drag_position: Option<Vec2>,
 }
 
+#[derive(Deref, DerefMut)]
+pub struct CardHoverAreaSize(Vec2);
+
 #[derive(AssetCollection)]
 pub struct CardImages {
     #[asset(path = "vector_images/card_background.png")]
@@ -48,8 +54,12 @@ pub struct CardImages {
     border: Handle<Image>,
 }
 
-fn world_setup(mut commands: Commands, card_images: Res<CardImages>) {
+fn world_setup(mut commands: Commands, card_images: Res<CardImages>, images: Res<Assets<Image>>) {
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
+
+    // Can call `unwrap()` because the asset_loader will have caught any missing assets already.
+    let card_background = images.get(card_images.background.clone()).unwrap();
+    commands.insert_resource(CardHoverAreaSize(card_background.size()));
 
     for _ in 0..10 {
         spawn_card(&mut commands, &card_images);
@@ -70,7 +80,7 @@ fn spawn_card(commands: &mut Commands, card_images: &Res<CardImages>) {
         .with_children(|parent| {
             parent.spawn_bundle(SpriteBundle {
                 texture: card_images.border.clone(),
-                transform: Transform::from_xyz(0.0, 0.0, 1.0),
+                transform: Transform::from_xyz(0.0, 0.0, DELTA_Z),
                 sprite: Sprite {
                     color: CARD_BORDER_COLOR,
                     ..default()
@@ -84,7 +94,8 @@ fn card_mouse_drag_system(
     mouse_button: Res<Input<MouseButton>>,
     windows: Res<Windows>,
     camera_query: Query<(&Camera, &GlobalTransform), Without<Card>>,
-    mut card_query: Query<(&mut GlobalTransform, &mut Sprite, &mut Card)>,
+    mut card_query: Query<(&mut Transform, &GlobalTransform, &mut Sprite, &mut Card)>,
+    card_hover_size: Res<CardHoverAreaSize>,
 ) {
     let primary_window = windows.get_primary().expect("No primary window!");
     let (camera, camera_transform) = camera_query.single();
@@ -93,9 +104,9 @@ fn card_mouse_drag_system(
         let mouse_world_pos =
             window_pos_to_world_pos(camera, camera_transform, primary_window, mouse_window_pos);
 
-        for (mut transform, mut sprite, mut card) in card_query.iter_mut() {
+        for (mut transform, global_transform, mut sprite, mut card) in card_query.iter_mut() {
             // Assumes sprite size is 1x1, and that the transform.scale provides the actual size.
-            if let Some(pos) = in_bounds(&transform, mouse_world_pos) {
+            if let Some(pos) = in_bounds(card_hover_size.0, &global_transform, mouse_world_pos) {
                 if mouse_button.just_pressed(MouseButton::Left) {
                     card.relative_drag_position = Some(pos);
                     sprite.color = CARD_DRAG_COLOR;
@@ -137,11 +148,12 @@ fn window_pos_to_world_pos(
 
 /// Returns where in the bounds the position is located.
 /// `None` if the position is not in bounds.
-fn in_bounds(transform: &GlobalTransform, position: Vec2) -> Option<Vec2> {
+/// Assumes the `size`'s origin is at it's center.
+fn in_bounds(size: Vec2, transform: &GlobalTransform, position_to_check: Vec2) -> Option<Vec2> {
     // TODO (Wybe 2022-05-14): Take into account rotation.
-    let half_size = transform.scale.truncate() / 2.0;
+    let half_size = size * transform.scale.truncate() / 2.0;
 
-    let pos_in_bounds = position - transform.translation.truncate();
+    let pos_in_bounds = position_to_check - transform.translation.truncate();
 
     if pos_in_bounds.x >= -half_size.x
         && pos_in_bounds.x <= half_size.x
