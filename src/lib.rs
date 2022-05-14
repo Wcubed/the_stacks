@@ -1,9 +1,11 @@
 use bevy::prelude::*;
-use bevy::render::render_resource::TextureDimension;
 use bevy_asset_loader::{AssetCollection, AssetLoader};
 
 const CARD_Z: f32 = 1.0;
 const CARD_DRAG_Z: f32 = 2.0;
+
+/// Amount of display units card moves per second if it overlaps with another.
+const CARD_OVERLAP_MOVEMENT: f32 = 500.0;
 
 /// Tiny change in Z position, used to put sprites "in front" of other sprites.
 const DELTA_Z: f32 = 0.001;
@@ -35,7 +37,7 @@ impl Plugin for TheStacksPlugin {
             .add_system_set(
                 SystemSet::on_update(GameState::Run)
                     .with_system(card_mouse_drag_system)
-                    .with_system(card_overlap_prevention_system),
+                    .with_system(card_overlap_nudging_system),
             );
     }
 }
@@ -108,7 +110,7 @@ fn card_mouse_drag_system(
         ),
         With<Card>,
     >,
-    card_hover_size: Res<CardVisualSize>,
+    card_visual_size: Res<CardVisualSize>,
 ) {
     let primary_window = windows.get_primary().expect("No primary window!");
     let (camera, camera_transform) = camera_query.single();
@@ -121,7 +123,7 @@ fn card_mouse_drag_system(
             card_query.iter_mut()
         {
             // Assumes sprite size is 1x1, and that the transform.scale provides the actual size.
-            if let Some(pos) = in_bounds(card_hover_size.0, &global_transform, mouse_world_pos) {
+            if let Some(pos) = in_bounds(card_visual_size.0, &global_transform, mouse_world_pos) {
                 if mouse_button.just_pressed(MouseButton::Left) {
                     commands
                         .entity(entity)
@@ -150,7 +152,32 @@ fn card_mouse_drag_system(
     }
 }
 
-fn card_overlap_prevention_system() {}
+/// Slowly nudges cards that are not dragged, until they don't overlap.
+fn card_overlap_nudging_system(
+    time: Res<Time>,
+    mut undragged_cards: Query<
+        (&GlobalTransform, &mut Transform),
+        (With<Card>, Without<CardRelativeDragPosition>),
+    >,
+    card_visual_size: Res<CardVisualSize>,
+) {
+    let mut combinations = undragged_cards.iter_combinations_mut();
+    while let Some([(global_transform1, mut transform1), (global_transform2, mut transform2)]) =
+        combinations.fetch_next()
+    {
+        // TODO (Wybe 2022-05-14): Should we account for scaling and rotation?
+        if let Some(direction) = get_overlap_direction(
+            global_transform1.translation.truncate(),
+            card_visual_size.0,
+            global_transform2.translation.truncate(),
+            card_visual_size.0,
+        ) {
+            let movement = (direction * CARD_OVERLAP_MOVEMENT * time.delta_seconds()).extend(0.0);
+            transform1.translation += movement;
+            transform2.translation -= movement;
+        }
+    }
+}
 
 fn window_pos_to_world_pos(
     camera: &Camera,
@@ -183,5 +210,67 @@ fn in_bounds(size: Vec2, transform: &GlobalTransform, position_to_check: Vec2) -
         Some(pos_in_bounds)
     } else {
         None
+    }
+}
+
+/// Returns the (normalized) direction_between_two_overlapping_rectangles.
+/// Returns `None` if the rectangles are not overlapping.
+/// TODO (Wybe 2022-05-14): Take into account scaling and rotation?
+///                         And then accept a GlobalTransform instead of a Vec2.
+fn get_overlap_direction(pos1: Vec2, size1: Vec2, pos2: Vec2, size2: Vec2) -> Option<Vec2> {
+    let minimum_distance = (size1 / 2.0) + (size2 / 2.0);
+
+    let distance = pos1 - pos2;
+
+    if distance.x.abs() - minimum_distance.x < 0.0 && distance.y.abs() - minimum_distance.y < 0.0 {
+        if distance.length() == 0.0 {
+            // `Vec2::normalize()` returns `NaN` when the vector length is close to 0.
+            // So we have to make up a direction ourselves.
+            Some(Vec2::new(1.0, 0.0))
+        } else {
+            Some(distance.normalize())
+        }
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{get_overlap_direction, Vec2};
+    use std::f32::consts::FRAC_1_SQRT_2;
+
+    #[test]
+    fn test_get_overlap_direction() {
+        let overlap = get_overlap_direction(
+            Vec2::new(10.0, 10.0),
+            Vec2::new(6.0, 6.0),
+            Vec2::new(12.0, 12.0),
+            Vec2::new(4.0, 4.0),
+        )
+        .unwrap();
+        assert_eq!(overlap, Vec2::new(-FRAC_1_SQRT_2, -FRAC_1_SQRT_2));
+
+        let overlap_invert_arguments = get_overlap_direction(
+            Vec2::new(12.0, 12.0),
+            Vec2::new(4.0, 4.0),
+            Vec2::new(10.0, 10.0),
+            Vec2::new(6.0, 6.0),
+        )
+        .unwrap();
+
+        // When the two rectangles are swapped, the output vector should also swap it's sine.
+        assert_eq!(overlap, overlap_invert_arguments * -1.0);
+    }
+
+    #[test]
+    fn test_get_overlap_direction_when_no_overlap() {
+        let overlap = get_overlap_direction(
+            Vec2::new(10.0, 10.0),
+            Vec2::new(6.0, 6.0),
+            Vec2::new(16.0, 10.0),
+            Vec2::new(4.0, 4.0),
+        );
+        assert_eq!(overlap, None);
     }
 }
