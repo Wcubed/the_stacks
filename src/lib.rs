@@ -1,5 +1,12 @@
+use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 use bevy::prelude::*;
+use bevy::render::camera::Camera2d;
 use bevy_asset_loader::{AssetCollection, AssetLoader};
+
+/// Mouse wheels are less precise than touchpads, so we scale the zoom when using a scroll wheel.
+const MOUSE_WHEEL_ZOOM_FACTOR: f32 = 0.1;
+const MAX_ZOOMED_OUT_SCALE: f32 = 10.0;
+const MAX_ZOOMED_IN_SCALE: f32 = 1.0;
 
 const CARD_Z: f32 = 1.0;
 const CARD_DRAG_Z: f32 = 2.0;
@@ -36,6 +43,7 @@ impl Plugin for TheStacksPlugin {
             .add_system_set(SystemSet::on_enter(GameState::Run).with_system(world_setup))
             .add_system_set(
                 SystemSet::on_update(GameState::Run)
+                    .with_system(camera_zoom_system)
                     .with_system(card_mouse_drag_system)
                     .with_system(card_overlap_nudging_system),
             );
@@ -95,11 +103,33 @@ fn spawn_card(commands: &mut Commands, card_images: &Res<CardImages>) {
         });
 }
 
+fn camera_zoom_system(
+    mut camera_query: Query<&mut Transform, With<Camera2d>>,
+    mut mouse_wheel: EventReader<MouseWheel>,
+) {
+    let mut camera = camera_query.single_mut();
+    for event in mouse_wheel.iter() {
+        let scroll_amount = match event.unit {
+            MouseScrollUnit::Line => event.y * MOUSE_WHEEL_ZOOM_FACTOR,
+            MouseScrollUnit::Pixel => event.y,
+        } * camera.scale.x;
+
+        camera.scale.x -= scroll_amount;
+        camera.scale.x = camera
+            .scale
+            .x
+            .clamp(MAX_ZOOMED_IN_SCALE, MAX_ZOOMED_OUT_SCALE);
+
+        // Zoom is always equal on x an y axis.
+        camera.scale.y = camera.scale.x;
+    }
+}
+
 fn card_mouse_drag_system(
     mut commands: Commands,
     mouse_button: Res<Input<MouseButton>>,
     windows: Res<Windows>,
-    camera_query: Query<(&Camera, &GlobalTransform), Without<Card>>,
+    camera_query: Query<(&Camera, &GlobalTransform), (With<Camera2d>, Without<Card>)>,
     mut card_query: Query<
         (
             Entity,
