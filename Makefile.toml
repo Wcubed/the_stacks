@@ -1,0 +1,11 @@
+[env]
+VECTOR_IMAGES = { glob = "assets/vector_images/*.svg" }
+
+[tasks.pre-build]
+dependencies = [
+    "export_svg"
+]
+
+[tasks.export_svg]
+command = "inkscape"
+args = ["@@split(VECTOR_IMAGES,;)", "--export-type", "png"]
