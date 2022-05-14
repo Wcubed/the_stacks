@@ -1,10 +1,13 @@
-use bevy::math::{const_vec2, vec2};
+use bevy::math::{const_vec2, const_vec3};
 use bevy::prelude::*;
 use bevy::render::camera::Camera2d;
 use bevy_asset_loader::AssetCollection;
 
 const CARD_Z: f32 = 1.0;
 const CARD_DRAG_Z: f32 = 2.0;
+/// Extra scaling a card gets when a user "picks it up".
+/// This should help in giving the illusion of the card being above the other cards.
+const CARD_DRAG_SCALE: Vec3 = const_vec3!([1.1, 1.1, 1.]);
 
 /// Max amount of display units a card moves per second if it overlaps with another.
 const CARD_OVERLAP_MOVEMENT: f32 = 1000.0;
@@ -106,6 +109,8 @@ pub fn card_mouse_drag_system(
                         .insert(CardRelativeDragPosition(pos));
 
                     sprite.color = CARD_DRAG_COLOR;
+                    transform.scale = CARD_DRAG_SCALE;
+
                     // Can only drag one card at a time.
                     // TODO (Wybe 2022-05-14): Make this not break out of a loop that does more stuff.
                     break;
@@ -119,6 +124,7 @@ pub fn card_mouse_drag_system(
             if mouse_button.just_released(MouseButton::Left) {
                 commands.entity(entity).remove::<CardRelativeDragPosition>();
                 transform.translation.z = CARD_Z;
+                transform.scale = Vec3::ONE;
             }
 
             if let Some(pos) = maybe_drag_position {
