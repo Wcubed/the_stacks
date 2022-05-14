@@ -44,13 +44,17 @@ impl Plugin for CardPlugin {
             .add_system_set(
                 SystemSet::on_update(GameState::Run)
                     .with_system(card_mouse_drag_system)
-                    .with_system(card_overlap_nudging_system),
+                    //.with_system(card_overlap_nudging_system)
+                    .with_system(card_stacking_system),
             );
     }
 }
 
-#[derive(Component)]
-pub struct Card;
+#[derive(Component, Default, Clone)]
+pub struct Card {
+    next_in_stack: Option<Entity>,
+    previous_in_stack: Option<Entity>,
+}
 
 #[derive(Component, Deref, DerefMut)]
 pub struct CardRelativeDragPosition(Vec2);
@@ -95,7 +99,7 @@ pub fn spawn_card(commands: &mut Commands, card_images: &Res<CardImages>) {
             },
             ..default()
         })
-        .insert(Card)
+        .insert(Card::default())
         .with_children(|parent| {
             parent.spawn_bundle(SpriteBundle {
                 texture: card_images.border.clone(),
@@ -171,6 +175,97 @@ pub fn card_mouse_drag_system(
             }
         }
     }
+}
+
+pub fn card_stacking_system(
+    mut commands: Commands,
+    card_query: Query<(Entity, &Card, &GlobalTransform)>,
+    card_visual_size: Res<CardVisualSize>,
+    mut card_dropped_reader: EventReader<CardDroppedEvent>,
+) {
+    for CardDroppedEvent(dropped_entity, dropped_global_transform) in card_dropped_reader.iter() {
+        let mut closest_drop_target = None;
+
+        // Find which card we are overlapping the most.
+        // TODO (Wybe 2022-05-14): This should also check if the card we are overlapping is
+        //   a valid target to stack with.
+        for (entity, card, global_transform) in card_query.iter() {
+            if entity == *dropped_entity {
+                // Cannot drop onto self.
+                continue;
+            }
+            if card.next_in_stack.is_some() {
+                // Cannot drop into the middle of a stack.
+                continue;
+            }
+
+            if let Some(distance) = get_movement_to_no_longer_overlap(
+                global_transform.translation.truncate(),
+                card_visual_size.0,
+                dropped_global_transform.translation.truncate(),
+                card_visual_size.0,
+            )
+            .map(|v| v.length())
+            {
+                if let Some((_, shortest_distance)) = closest_drop_target {
+                    if distance < shortest_distance {
+                        closest_drop_target = Some((entity, distance));
+                    }
+                } else {
+                    closest_drop_target = Some((entity, distance));
+                }
+            }
+        }
+
+        // If we have a target. We need to add this card on top of it.
+        // TODO (Wybe 2022-05-14): Should also handle stacking multiple stacks.
+        //    maybe we should chance the concept of what the user is dragging to stacks,
+        //    instead of referencing individual cards.
+        if let Some((drop_target, _)) = closest_drop_target {
+            info!(
+                "Dropped card {:?} is stacking with {:?}",
+                dropped_entity, drop_target
+            );
+
+            let dropped_card = card_query.get_component::<Card>(*dropped_entity).unwrap();
+            let target_card = card_query.get_component::<Card>(drop_target).unwrap();
+
+            add_card_to_stack(
+                &mut commands,
+                *dropped_entity,
+                dropped_card,
+                drop_target,
+                target_card,
+            );
+        }
+    }
+}
+
+/// Adds a card to the stack of which the `bottom_entity` is the bottom card.
+/// Effects are applied via Commands, which means it is visible next update.
+pub fn add_card_to_stack(
+    commands: &mut Commands,
+    card_entity: Entity,
+    card: &Card,
+    bottom_entity: Entity,
+    bottom_card: &Card,
+) {
+    let mut stacked_card = card.clone();
+    stacked_card.previous_in_stack = Some(bottom_entity);
+    let mut stacked_bottom_card = bottom_card.clone();
+    stacked_bottom_card.next_in_stack = Some(card_entity);
+
+    // Put this card in front of the parent.
+    let new_transform = Transform::from_xyz(0., -CARD_STACK_Y_SPACING, DELTA_Z);
+
+    commands
+        .entity(bottom_entity)
+        .add_child(card_entity)
+        .insert(stacked_bottom_card);
+    commands
+        .entity(card_entity)
+        .insert(stacked_card)
+        .insert(new_transform);
 }
 
 /// Slowly nudges cards that are not dragged, until they don't overlap.
