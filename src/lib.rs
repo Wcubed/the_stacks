@@ -4,8 +4,8 @@ use bevy_asset_loader::{AssetCollection, AssetLoader};
 const CARD_Z: f32 = 1.0;
 const CARD_DRAG_Z: f32 = 2.0;
 
-/// Amount of display units card moves per second if it overlaps with another.
-const CARD_OVERLAP_MOVEMENT: f32 = 500.0;
+/// Max amount of display units a card moves per second if it overlaps with another.
+const CARD_OVERLAP_MOVEMENT: f32 = 1000.0;
 
 /// Tiny change in Z position, used to put sprites "in front" of other sprites.
 const DELTA_Z: f32 = 0.001;
@@ -119,11 +119,11 @@ fn card_mouse_drag_system(
         let mouse_world_pos =
             window_pos_to_world_pos(camera, camera_transform, primary_window, mouse_window_pos);
 
-        for (entity, mut transform, global_transform, mut sprite, mut maybe_drag_position) in
+        for (entity, mut transform, global_transform, mut sprite, maybe_drag_position) in
             card_query.iter_mut()
         {
             // Assumes sprite size is 1x1, and that the transform.scale provides the actual size.
-            if let Some(pos) = in_bounds(card_visual_size.0, &global_transform, mouse_world_pos) {
+            if let Some(pos) = in_bounds(card_visual_size.0, global_transform, mouse_world_pos) {
                 if mouse_button.just_pressed(MouseButton::Left) {
                     commands
                         .entity(entity)
@@ -166,13 +166,20 @@ fn card_overlap_nudging_system(
         combinations.fetch_next()
     {
         // TODO (Wybe 2022-05-14): Should we account for scaling and rotation?
-        if let Some(direction) = get_overlap_direction(
+        if let Some(total_movement) = get_movement_to_no_longer_overlap(
             global_transform1.translation.truncate(),
             card_visual_size.0,
             global_transform2.translation.truncate(),
             card_visual_size.0,
         ) {
-            let movement = (direction * CARD_OVERLAP_MOVEMENT * time.delta_seconds()).extend(0.0);
+            let max_movement_this_frame = CARD_OVERLAP_MOVEMENT * time.delta_seconds();
+
+            let movement = if total_movement.length() <= max_movement_this_frame {
+                total_movement.extend(0.0)
+            } else {
+                (total_movement.normalize() * max_movement_this_frame).extend(0.0)
+            };
+
             transform1.translation += movement;
             transform2.translation -= movement;
         }
@@ -213,23 +220,41 @@ fn in_bounds(size: Vec2, transform: &GlobalTransform, position_to_check: Vec2) -
     }
 }
 
-/// Returns the (normalized) direction_between_two_overlapping_rectangles.
+/// Returns the shortest distance two rectangles should move in, in order not to overlap anymore.
+/// The first rectangle given should use the movement vector as-is, the second should invert it.
 /// Returns `None` if the rectangles are not overlapping.
 /// TODO (Wybe 2022-05-14): Take into account scaling and rotation?
 ///                         And then accept a GlobalTransform instead of a Vec2.
-fn get_overlap_direction(pos1: Vec2, size1: Vec2, pos2: Vec2, size2: Vec2) -> Option<Vec2> {
-    let minimum_distance = (size1 / 2.0) + (size2 / 2.0);
+fn get_movement_to_no_longer_overlap(
+    pos1: Vec2,
+    size1: Vec2,
+    pos2: Vec2,
+    size2: Vec2,
+) -> Option<Vec2> {
+    let minimum_allowed_distance = (size1 / 2.0) + (size2 / 2.0);
 
     let distance = pos1 - pos2;
+    let abs_distance = distance.abs();
+    let overlap = minimum_allowed_distance - abs_distance;
+    let mut movement = overlap * (distance / abs_distance);
 
-    if distance.x.abs() - minimum_distance.x < 0.0 && distance.y.abs() - minimum_distance.y < 0.0 {
-        if distance.length() == 0.0 {
-            // `Vec2::normalize()` returns `NaN` when the vector length is close to 0.
-            // So we have to make up a direction ourselves.
-            Some(Vec2::new(1.0, 0.0))
-        } else {
-            Some(distance.normalize())
+    if overlap.x > 0.0 && overlap.y > 0.0 {
+        if movement.x.is_nan() {
+            movement.x = minimum_allowed_distance.x;
         }
+        if movement.y.is_nan() {
+            movement.y = minimum_allowed_distance.y;
+        }
+
+        // Select shortest distance.
+        if overlap.x < overlap.y {
+            movement.y = 0.0;
+        } else {
+            movement.x = 0.0;
+        }
+
+        // Divide by 2, because both rectangles are going to move.
+        Some(movement / 2.0)
     } else {
         None
     }
@@ -237,21 +262,20 @@ fn get_overlap_direction(pos1: Vec2, size1: Vec2, pos2: Vec2, size2: Vec2) -> Op
 
 #[cfg(test)]
 mod tests {
-    use crate::{get_overlap_direction, Vec2};
-    use std::f32::consts::FRAC_1_SQRT_2;
+    use crate::{get_movement_to_no_longer_overlap, Vec2};
 
     #[test]
-    fn test_get_overlap_direction() {
-        let overlap = get_overlap_direction(
+    fn test_get_movement_to_no_longer_overlap() {
+        let overlap = get_movement_to_no_longer_overlap(
             Vec2::new(10.0, 10.0),
             Vec2::new(6.0, 6.0),
             Vec2::new(12.0, 12.0),
             Vec2::new(4.0, 4.0),
         )
         .unwrap();
-        assert_eq!(overlap, Vec2::new(-FRAC_1_SQRT_2, -FRAC_1_SQRT_2));
+        assert_eq!(overlap, Vec2::new(0.0, -1.5));
 
-        let overlap_invert_arguments = get_overlap_direction(
+        let overlap_invert_arguments = get_movement_to_no_longer_overlap(
             Vec2::new(12.0, 12.0),
             Vec2::new(4.0, 4.0),
             Vec2::new(10.0, 10.0),
@@ -259,13 +283,13 @@ mod tests {
         )
         .unwrap();
 
-        // When the two rectangles are swapped, the output vector should also swap it's sine.
+        // When the two rectangles are swapped, the output vector should also swap it's sign.
         assert_eq!(overlap, overlap_invert_arguments * -1.0);
     }
 
     #[test]
-    fn test_get_overlap_direction_when_no_overlap() {
-        let overlap = get_overlap_direction(
+    fn test_get_movement_to_no_longer_overlap_when_no_overlap() {
+        let overlap = get_movement_to_no_longer_overlap(
             Vec2::new(10.0, 10.0),
             Vec2::new(6.0, 6.0),
             Vec2::new(16.0, 10.0),
