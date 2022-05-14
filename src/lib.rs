@@ -136,7 +136,8 @@ fn camera_drag_system(
     dragged_card_query: Query<&CardRelativeDragPosition>,
 ) {
     if !dragged_card_query.is_empty() {
-        // The user is dragging cards, so we can't be dragging the camera.
+        // The user is dragging cards, so we shouldn't be dragging the camera, otherwise that
+        // might mess up the dragging.
         return;
     }
     let window = windows.get_primary().expect("No primary window!");
@@ -146,7 +147,7 @@ fn camera_drag_system(
     };
     let delta = current_pos - last_pos.unwrap_or(current_pos);
 
-    if mouse_button.pressed(MouseButton::Left) {
+    if mouse_button.pressed(MouseButton::Left) || mouse_button.pressed(MouseButton::Right) {
         let window_size = Vec2::new(window.width(), window.height());
 
         let (mut camera_transform, projection) = camera_query.single_mut();
