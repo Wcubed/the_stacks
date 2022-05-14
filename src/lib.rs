@@ -1,7 +1,5 @@
-use bevy::math::const_vec2;
 use bevy::prelude::*;
 
-const CARD_SIZE: Vec2 = const_vec2!([100.0, 130.0]);
 const CARD_Z: f32 = 1.0;
 const CARD_DRAG_Z: f32 = 2.0;
 
@@ -9,12 +7,24 @@ const CARD_COLOR: Color = Color::rgb(0.25, 0.25, 0.75);
 /// TODO (Wybe 2022-05-14): Convert this into an overlay somehow, instead of changing the card sprite color.
 const CARD_DRAG_COLOR: Color = Color::rgb(0.30, 0.30, 0.80);
 const CARD_HOVER_COLOR: Color = Color::rgb(0.35, 0.35, 0.85);
+const CARD_BORDER_COLOR: Color = Color::BLACK;
+
+const ASSET_LOAD_STAGE: &str = "asset_load";
+const WORLD_SETUP_STAGE: &str = "world_setup";
 
 pub struct TheStacksPlugin;
 
 impl Plugin for TheStacksPlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system(setup)
+        app.insert_resource(Msaa { samples: 4 })
+            .add_startup_stage_after(
+                StartupStage::Startup,
+                ASSET_LOAD_STAGE,
+                SystemStage::parallel(),
+            )
+            .add_startup_system_to_stage(ASSET_LOAD_STAGE, load_assets)
+            .add_startup_stage_after(ASSET_LOAD_STAGE, WORLD_SETUP_STAGE, SystemStage::parallel())
+            .add_startup_system_to_stage(WORLD_SETUP_STAGE, world_setup)
             .add_system(card_mouse_drag_system);
     }
 }
@@ -24,25 +34,52 @@ pub struct Card {
     relative_drag_position: Option<Vec2>,
 }
 
-fn setup(mut commands: Commands) {
+pub struct CardImages {
+    background: Handle<Image>,
+    border: Handle<Image>,
+}
+
+fn load_assets(mut commands: Commands, asset_server: Res<AssetServer>) {
+    // Enable hot reloading.
+    asset_server.watch_for_changes().unwrap();
+
+    let background = asset_server.load("vector_images/card_background.png");
+    let border = asset_server.load("vector_images/card_border.png");
+
+    commands.insert_resource(CardImages { background, border });
+    info!("Here!")
+}
+
+fn world_setup(mut commands: Commands, card_images: Res<CardImages>) {
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
 
     for _ in 0..10 {
-        spawn_card(&mut commands);
+        spawn_card(&mut commands, &card_images);
     }
 }
 
-fn spawn_card(commands: &mut Commands) {
+fn spawn_card(commands: &mut Commands, card_images: &Res<CardImages>) {
     commands
         .spawn_bundle(SpriteBundle {
+            texture: card_images.background.clone(),
             sprite: Sprite {
                 color: CARD_COLOR,
                 ..default()
             },
-            transform: Transform::from_scale(CARD_SIZE.extend(1.0)),
             ..default()
         })
-        .insert(Card::default());
+        .insert(Card::default())
+        .with_children(|parent| {
+            parent.spawn_bundle(SpriteBundle {
+                texture: card_images.border.clone(),
+                transform: Transform::from_xyz(0.0, 0.0, 1.0),
+                sprite: Sprite {
+                    color: CARD_BORDER_COLOR,
+                    ..default()
+                },
+                ..default()
+            });
+        });
 }
 
 fn card_mouse_drag_system(

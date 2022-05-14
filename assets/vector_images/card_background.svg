@@ -26,19 +26,19 @@
      inkscape:pageopacity="0"
      inkscape:pageshadow="2"
      inkscape:zoom="3.959798"
-     inkscape:cx="55.179582"
-     inkscape:cy="136.62313"
+     inkscape:cx="99.121218"
+     inkscape:cy="136.37059"
      inkscape:document-units="px"
      inkscape:current-layer="layer1"
      inkscape:pagecheckerboard="0"
      showgrid="true"
      borderlayer="true"
      units="px"
-     inkscape:window-width="3440"
+     inkscape:window-width="1720"
      inkscape:window-height="1411"
      inkscape:window-x="1920"
      inkscape:window-y="0"
-     inkscape:window-maximized="1">
+     inkscape:window-maximized="0">
     <inkscape:grid
        type="xygrid"
        id="grid51" />
@@ -65,6 +65,6 @@
        height="275"
        x="0"
        y="0"
-       ry="5" />
+       ry="10" />
   </g>
 </svg>
