@@ -1,7 +1,8 @@
+use crate::GameState;
 use bevy::math::{const_vec2, const_vec3};
 use bevy::prelude::*;
 use bevy::render::camera::Camera2d;
-use bevy_asset_loader::AssetCollection;
+use bevy_asset_loader::{AssetCollection, AssetLoader};
 
 const CARD_Z: f32 = 1.0;
 const CARD_DRAG_Z: f32 = 2.0;
@@ -17,11 +18,36 @@ const CARD_OVERLAP_SPACING: Vec2 = const_vec2!([10.0, 10.0]);
 /// Tiny change in Z position, used to put sprites "in front" of other sprites.
 const DELTA_Z: f32 = 0.001;
 
+/// How much of the previous card you can see when stacking cards.
+const CARD_STACK_Y_SPACING: f32 = 30.0;
+
 const CARD_COLOR: Color = Color::rgb(0.25, 0.25, 0.75);
 /// TODO (Wybe 2022-05-14): Convert this into an overlay somehow, instead of changing the card sprite color.
 const CARD_DRAG_COLOR: Color = Color::rgb(0.30, 0.30, 0.80);
 const CARD_HOVER_COLOR: Color = Color::rgb(0.35, 0.35, 0.85);
 const CARD_BORDER_COLOR: Color = Color::BLACK;
+
+pub struct CardPlugin;
+
+impl Plugin for CardPlugin {
+    fn build(&self, app: &mut App) {
+        AssetLoader::new(GameState::AssetLoading)
+            .continue_to_state(GameState::Run)
+            .with_collection::<CardImages>()
+            .build(app);
+
+        app.add_event::<CardDroppedEvent>()
+            .add_system_set(
+                SystemSet::on_exit(GameState::AssetLoading).with_system(on_assets_loaded),
+            )
+            .add_system_set(SystemSet::on_enter(GameState::Run).with_system(spawn_test_cards))
+            .add_system_set(
+                SystemSet::on_update(GameState::Run)
+                    .with_system(card_mouse_drag_system)
+                    .with_system(card_overlap_nudging_system),
+            );
+    }
+}
 
 #[derive(Component)]
 pub struct Card;
@@ -40,6 +66,9 @@ pub struct CardImages {
     border: Handle<Image>,
 }
 
+/// Event sent by the [card_mouse_drag_system] when the user drops a card.
+pub struct CardDroppedEvent(Entity, GlobalTransform);
+
 pub fn on_assets_loaded(
     mut commands: Commands,
     card_images: Res<CardImages>,
@@ -48,6 +77,12 @@ pub fn on_assets_loaded(
     // Can call `unwrap()` because the asset_loader will have caught any missing assets already.
     let card_background = images.get(card_images.background.clone()).unwrap();
     commands.insert_resource(CardVisualSize(card_background.size()));
+}
+
+pub fn spawn_test_cards(mut commands: Commands, card_images: Res<CardImages>) {
+    for _ in 0..10 {
+        spawn_card(&mut commands, &card_images);
+    }
 }
 
 pub fn spawn_card(commands: &mut Commands, card_images: &Res<CardImages>) {
@@ -90,6 +125,7 @@ pub fn card_mouse_drag_system(
         With<Card>,
     >,
     card_visual_size: Res<CardVisualSize>,
+    mut card_dropped_writer: EventWriter<CardDroppedEvent>,
 ) {
     let primary_window = windows.get_primary().expect("No primary window!");
     let (camera, camera_transform) = camera_query.single();
@@ -121,14 +157,17 @@ pub fn card_mouse_drag_system(
                 sprite.color = CARD_COLOR;
             }
 
-            if mouse_button.just_released(MouseButton::Left) {
-                commands.entity(entity).remove::<CardRelativeDragPosition>();
-                transform.translation.z = CARD_Z;
-                transform.scale = Vec3::ONE;
-            }
-
             if let Some(pos) = maybe_drag_position {
                 transform.translation = (mouse_world_pos - pos.0).extend(CARD_DRAG_Z);
+
+                // Should we drop the card?
+                if mouse_button.just_released(MouseButton::Left) {
+                    commands.entity(entity).remove::<CardRelativeDragPosition>();
+                    transform.translation.z = CARD_Z;
+                    transform.scale = Vec3::ONE;
+
+                    card_dropped_writer.send(CardDroppedEvent(entity, *global_transform));
+                }
             }
         }
     }

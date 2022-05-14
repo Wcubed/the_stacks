@@ -1,4 +1,5 @@
 use crate::card::CardRelativeDragPosition;
+use crate::GameState;
 use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 use bevy::prelude::*;
 use bevy::render::camera::Camera2d;
@@ -7,6 +8,23 @@ use bevy::render::camera::Camera2d;
 const MOUSE_WHEEL_ZOOM_FACTOR: f32 = 0.1;
 const MAX_ZOOMED_OUT_SCALE: f32 = 10.0;
 const MAX_ZOOMED_IN_SCALE: f32 = 1.0;
+
+pub struct OrthographicCameraPlugin;
+
+impl Plugin for OrthographicCameraPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_system_set(SystemSet::on_enter(GameState::Run).with_system(camera_setup))
+            .add_system_set(
+                SystemSet::on_update(GameState::Run)
+                    .with_system(camera_zoom_system)
+                    .with_system(camera_drag_system),
+            );
+    }
+}
+
+pub fn camera_setup(mut commands: Commands) {
+    commands.spawn_bundle(OrthographicCameraBundle::new_2d());
+}
 
 pub fn camera_zoom_system(
     mut camera_query: Query<&mut Transform, With<Camera2d>>,
