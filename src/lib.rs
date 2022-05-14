@@ -33,18 +33,21 @@ impl Plugin for TheStacksPlugin {
             .add_state(GameState::AssetLoading)
             .add_system_set(SystemSet::on_enter(GameState::Run).with_system(world_setup))
             .add_system_set(
-                SystemSet::on_update(GameState::Run).with_system(card_mouse_drag_system),
+                SystemSet::on_update(GameState::Run)
+                    .with_system(card_mouse_drag_system)
+                    .with_system(card_overlap_prevention_system),
             );
     }
 }
 
-#[derive(Component, Default)]
-pub struct Card {
-    relative_drag_position: Option<Vec2>,
-}
+#[derive(Component)]
+pub struct Card;
+
+#[derive(Component, Deref, DerefMut)]
+pub struct CardRelativeDragPosition(Vec2);
 
 #[derive(Deref, DerefMut)]
-pub struct CardHoverAreaSize(Vec2);
+pub struct CardVisualSize(Vec2);
 
 #[derive(AssetCollection)]
 pub struct CardImages {
@@ -59,7 +62,7 @@ fn world_setup(mut commands: Commands, card_images: Res<CardImages>, images: Res
 
     // Can call `unwrap()` because the asset_loader will have caught any missing assets already.
     let card_background = images.get(card_images.background.clone()).unwrap();
-    commands.insert_resource(CardHoverAreaSize(card_background.size()));
+    commands.insert_resource(CardVisualSize(card_background.size()));
 
     for _ in 0..10 {
         spawn_card(&mut commands, &card_images);
@@ -76,7 +79,7 @@ fn spawn_card(commands: &mut Commands, card_images: &Res<CardImages>) {
             },
             ..default()
         })
-        .insert(Card::default())
+        .insert(Card)
         .with_children(|parent| {
             parent.spawn_bundle(SpriteBundle {
                 texture: card_images.border.clone(),
@@ -91,11 +94,21 @@ fn spawn_card(commands: &mut Commands, card_images: &Res<CardImages>) {
 }
 
 fn card_mouse_drag_system(
+    mut commands: Commands,
     mouse_button: Res<Input<MouseButton>>,
     windows: Res<Windows>,
     camera_query: Query<(&Camera, &GlobalTransform), Without<Card>>,
-    mut card_query: Query<(&mut Transform, &GlobalTransform, &mut Sprite, &mut Card)>,
-    card_hover_size: Res<CardHoverAreaSize>,
+    mut card_query: Query<
+        (
+            Entity,
+            &mut Transform,
+            &GlobalTransform,
+            &mut Sprite,
+            Option<&CardRelativeDragPosition>,
+        ),
+        With<Card>,
+    >,
+    card_hover_size: Res<CardVisualSize>,
 ) {
     let primary_window = windows.get_primary().expect("No primary window!");
     let (camera, camera_transform) = camera_query.single();
@@ -104,11 +117,16 @@ fn card_mouse_drag_system(
         let mouse_world_pos =
             window_pos_to_world_pos(camera, camera_transform, primary_window, mouse_window_pos);
 
-        for (mut transform, global_transform, mut sprite, mut card) in card_query.iter_mut() {
+        for (entity, mut transform, global_transform, mut sprite, mut maybe_drag_position) in
+            card_query.iter_mut()
+        {
             // Assumes sprite size is 1x1, and that the transform.scale provides the actual size.
             if let Some(pos) = in_bounds(card_hover_size.0, &global_transform, mouse_world_pos) {
                 if mouse_button.just_pressed(MouseButton::Left) {
-                    card.relative_drag_position = Some(pos);
+                    commands
+                        .entity(entity)
+                        .insert(CardRelativeDragPosition(pos));
+
                     sprite.color = CARD_DRAG_COLOR;
                     // Can only drag one card at a time.
                     // TODO (Wybe 2022-05-14): Make this not break out of a loop that does more stuff.
@@ -116,21 +134,23 @@ fn card_mouse_drag_system(
                 } else if !mouse_button.pressed(MouseButton::Left) {
                     sprite.color = CARD_HOVER_COLOR;
                 }
-            } else if card.relative_drag_position.is_none() {
+            } else if maybe_drag_position.is_none() {
                 sprite.color = CARD_COLOR;
             }
 
             if mouse_button.just_released(MouseButton::Left) {
-                card.relative_drag_position = None;
+                commands.entity(entity).remove::<CardRelativeDragPosition>();
                 transform.translation.z = CARD_Z;
             }
 
-            if let Some(pos) = card.relative_drag_position {
-                transform.translation = (mouse_world_pos - pos).extend(CARD_DRAG_Z);
+            if let Some(pos) = maybe_drag_position {
+                transform.translation = (mouse_world_pos - pos.0).extend(CARD_DRAG_Z);
             }
         }
     }
 }
+
+fn card_overlap_prevention_system() {}
 
 fn window_pos_to_world_pos(
     camera: &Camera,
