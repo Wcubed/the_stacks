@@ -23,7 +23,6 @@ const CARD_STACK_Y_SPACING: f32 = 30.0;
 
 const CARD_COLOR: Color = Color::rgb(0.25, 0.25, 0.75);
 /// TODO (Wybe 2022-05-14): Convert this into an overlay somehow, instead of changing the card sprite color.
-const CARD_DRAG_COLOR: Color = Color::rgb(0.30, 0.30, 0.80);
 const CARD_HOVER_COLOR: Color = Color::rgb(0.35, 0.35, 0.85);
 const CARD_BORDER_COLOR: Color = Color::BLACK;
 
@@ -131,14 +130,16 @@ pub fn card_mouse_drag_system(
     mouse_button: Res<Input<MouseButton>>,
     windows: Res<Windows>,
     camera_query: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
-    mut hovered_card_query: Query<
+    hovered_but_not_dragged_card_query: Query<
+        (Entity, &HoveredCard),
+        (With<Card>, Without<CardRelativeDragPosition>),
+    >,
+    mut dragged_card_query: Query<
         (
             Entity,
             &mut Transform,
             &GlobalTransform,
-            &mut Sprite,
-            &HoveredCard,
-            Option<&CardRelativeDragPosition>,
+            &CardRelativeDragPosition,
         ),
         With<Card>,
     >,
@@ -151,37 +152,33 @@ pub fn card_mouse_drag_system(
         let mouse_world_pos =
             window_pos_to_world_pos(camera, camera_transform, primary_window, mouse_window_pos);
 
-        // In principle there should ever only be 1 hovered card.
-        // But the system can work with multiple if need be.
-        for (
-            entity,
-            mut transform,
-            global_transform,
-            mut sprite,
-            hovered_card,
-            maybe_drag_position,
-        ) in hovered_card_query.iter_mut()
-        {
+        // Check for newly dragged cards.
+        for (entity, hovered_card) in hovered_but_not_dragged_card_query.iter() {
             if mouse_button.just_pressed(MouseButton::Left) {
                 commands
                     .entity(entity)
                     .insert(CardRelativeDragPosition(hovered_card.relative_hover_pos));
-
-                sprite.color = CARD_DRAG_COLOR;
-                transform.scale = CARD_DRAG_SCALE;
             }
+        }
 
-            if let Some(pos) = maybe_drag_position {
-                transform.translation = (mouse_world_pos - pos.0).extend(CARD_DRAG_Z);
+        // In principle there should ever only be 1 hovered card.
+        // But the system can work with multiple if need be.
+        for (entity, mut transform, global_transform, drag_position) in
+            dragged_card_query.iter_mut()
+        {
+            if mouse_button.just_released(MouseButton::Left) {
+                // Drop the cards.
 
-                // Should we drop the card?
-                if mouse_button.just_released(MouseButton::Left) {
-                    commands.entity(entity).remove::<CardRelativeDragPosition>();
-                    transform.translation.z = CARD_Z;
-                    transform.scale = Vec3::ONE;
+                commands.entity(entity).remove::<CardRelativeDragPosition>();
+                transform.translation.z = CARD_Z;
+                transform.scale = Vec3::ONE;
 
-                    card_dropped_writer.send(CardDroppedEvent(entity, *global_transform));
-                }
+                card_dropped_writer.send(CardDroppedEvent(entity, *global_transform));
+            } else {
+                // Drag the cards.
+
+                transform.translation = (mouse_world_pos - drag_position.0).extend(CARD_DRAG_Z);
+                transform.scale = CARD_DRAG_SCALE;
             }
         }
     }
