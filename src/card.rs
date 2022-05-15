@@ -44,23 +44,12 @@ impl Plugin for CardPlugin {
             .add_system_set(
                 SystemSet::on_update(GameState::Run)
                     .with_system(card_mouse_drag_system)
-                    //.with_system(card_overlap_nudging_system)
+                    .with_system(card_hover_system)
+                    .with_system(card_overlap_nudging_system)
                     .with_system(card_stacking_system),
             );
     }
 }
-
-#[derive(Component, Default, Clone)]
-pub struct Card {
-    next_in_stack: Option<Entity>,
-    previous_in_stack: Option<Entity>,
-}
-
-#[derive(Component, Deref, DerefMut)]
-pub struct CardRelativeDragPosition(Vec2);
-
-#[derive(Deref, DerefMut)]
-pub struct CardVisualSize(Vec2);
 
 #[derive(AssetCollection)]
 pub struct CardImages {
@@ -69,6 +58,29 @@ pub struct CardImages {
     #[asset(path = "vector_images/card_border.png")]
     border: Handle<Image>,
 }
+
+#[derive(Component)]
+pub struct Card;
+
+#[derive(Component)]
+/// Indicates this is the topmost card of a stack of cards.
+/// All individual cards are stack roots.
+pub struct CardStackRoot;
+
+#[derive(Component)]
+pub struct NextCardInStack(Entity);
+
+#[derive(Component, Deref, DerefMut)]
+pub struct CardRelativeDragPosition(Vec2);
+
+#[derive(Component)]
+/// Indicates a card is being hovered with the mouse.
+pub struct HoveredCard {
+    relative_hover_pos: Vec2,
+}
+
+#[derive(Deref, DerefMut)]
+pub struct CardVisualSize(Vec2);
 
 /// Event sent by the [card_mouse_drag_system] when the user drops a card.
 pub struct CardDroppedEvent(Entity, GlobalTransform);
@@ -99,7 +111,8 @@ pub fn spawn_card(commands: &mut Commands, card_images: &Res<CardImages>) {
             },
             ..default()
         })
-        .insert(Card::default())
+        .insert(Card)
+        .insert(CardStackRoot)
         .with_children(|parent| {
             parent.spawn_bundle(SpriteBundle {
                 texture: card_images.border.clone(),
@@ -118,17 +131,17 @@ pub fn card_mouse_drag_system(
     mouse_button: Res<Input<MouseButton>>,
     windows: Res<Windows>,
     camera_query: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
-    mut card_query: Query<
+    mut hovered_card_query: Query<
         (
             Entity,
             &mut Transform,
             &GlobalTransform,
             &mut Sprite,
+            &HoveredCard,
             Option<&CardRelativeDragPosition>,
         ),
         With<Card>,
     >,
-    card_visual_size: Res<CardVisualSize>,
     mut card_dropped_writer: EventWriter<CardDroppedEvent>,
 ) {
     let primary_window = windows.get_primary().expect("No primary window!");
@@ -138,27 +151,24 @@ pub fn card_mouse_drag_system(
         let mouse_world_pos =
             window_pos_to_world_pos(camera, camera_transform, primary_window, mouse_window_pos);
 
-        for (entity, mut transform, global_transform, mut sprite, maybe_drag_position) in
-            card_query.iter_mut()
+        // In principle there should ever only be 1 hovered card.
+        // But the system can work with multiple if need be.
+        for (
+            entity,
+            mut transform,
+            global_transform,
+            mut sprite,
+            hovered_card,
+            maybe_drag_position,
+        ) in hovered_card_query.iter_mut()
         {
-            // Assumes sprite size is 1x1, and that the transform.scale provides the actual size.
-            if let Some(pos) = in_bounds(card_visual_size.0, global_transform, mouse_world_pos) {
-                if mouse_button.just_pressed(MouseButton::Left) {
-                    commands
-                        .entity(entity)
-                        .insert(CardRelativeDragPosition(pos));
+            if mouse_button.just_pressed(MouseButton::Left) {
+                commands
+                    .entity(entity)
+                    .insert(CardRelativeDragPosition(hovered_card.relative_hover_pos));
 
-                    sprite.color = CARD_DRAG_COLOR;
-                    transform.scale = CARD_DRAG_SCALE;
-
-                    // Can only drag one card at a time.
-                    // TODO (Wybe 2022-05-14): Make this not break out of a loop that does more stuff.
-                    break;
-                } else if !mouse_button.pressed(MouseButton::Left) {
-                    sprite.color = CARD_HOVER_COLOR;
-                }
-            } else if maybe_drag_position.is_none() {
-                sprite.color = CARD_COLOR;
+                sprite.color = CARD_DRAG_COLOR;
+                transform.scale = CARD_DRAG_SCALE;
             }
 
             if let Some(pos) = maybe_drag_position {
@@ -177,9 +187,62 @@ pub fn card_mouse_drag_system(
     }
 }
 
+pub fn card_hover_system(
+    mut commands: Commands,
+    windows: Res<Windows>,
+    camera_query: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
+    mut card_query: Query<(Entity, &GlobalTransform, &mut Sprite), With<Card>>,
+    card_visual_size: Res<CardVisualSize>,
+) {
+    let primary_window = windows.get_primary().expect("No primary window!");
+    let (camera, camera_transform) = camera_query.single();
+
+    if let Some(mouse_window_pos) = primary_window.cursor_position() {
+        let mouse_world_pos =
+            window_pos_to_world_pos(camera, camera_transform, primary_window, mouse_window_pos);
+
+        let mut topmost_card = None;
+
+        for (entity, transform, _) in card_query.iter_mut() {
+            if let Some(relative_pos) = in_bounds(card_visual_size.0, transform, mouse_world_pos) {
+                if let Some((_, _, highest_z)) = topmost_card {
+                    if highest_z < transform.translation.z {
+                        topmost_card = Some((entity, relative_pos, transform.translation.z));
+                    }
+                } else {
+                    topmost_card = Some((entity, relative_pos, transform.translation.z));
+                }
+            }
+        }
+
+        if let Some((hovered_entity, relative_pos, _)) = &topmost_card {
+            let mut topmost_sprite = card_query
+                .get_component_mut::<Sprite>(*hovered_entity)
+                .unwrap();
+            topmost_sprite.color = CARD_HOVER_COLOR;
+
+            commands.entity(*hovered_entity).insert(HoveredCard {
+                relative_hover_pos: *relative_pos,
+            });
+        }
+
+        // Clear all other hovers, so we don't leave stray ones lying around.
+        for (entity, _, mut sprite) in card_query.iter_mut() {
+            if let Some((hovered_entity, _, _)) = topmost_card {
+                if entity == hovered_entity {
+                    continue;
+                }
+            }
+
+            sprite.color = CARD_COLOR;
+            commands.entity(entity).remove::<HoveredCard>();
+        }
+    }
+}
+
 pub fn card_stacking_system(
     mut commands: Commands,
-    card_query: Query<(Entity, &Card, &GlobalTransform)>,
+    targetable_card_query: Query<(Entity, &Card, &GlobalTransform), Without<NextCardInStack>>,
     card_visual_size: Res<CardVisualSize>,
     mut card_dropped_reader: EventReader<CardDroppedEvent>,
 ) {
@@ -189,13 +252,9 @@ pub fn card_stacking_system(
         // Find which card we are overlapping the most.
         // TODO (Wybe 2022-05-14): This should also check if the card we are overlapping is
         //   a valid target to stack with.
-        for (entity, card, global_transform) in card_query.iter() {
+        for (entity, card, global_transform) in targetable_card_query.iter() {
             if entity == *dropped_entity {
                 // Cannot drop onto self.
-                continue;
-            }
-            if card.next_in_stack.is_some() {
-                // Cannot drop into the middle of a stack.
                 continue;
             }
 
@@ -227,16 +286,7 @@ pub fn card_stacking_system(
                 dropped_entity, drop_target
             );
 
-            let dropped_card = card_query.get_component::<Card>(*dropped_entity).unwrap();
-            let target_card = card_query.get_component::<Card>(drop_target).unwrap();
-
-            add_card_to_stack(
-                &mut commands,
-                *dropped_entity,
-                dropped_card,
-                drop_target,
-                target_card,
-            );
+            add_card_to_stack(&mut commands, *dropped_entity, drop_target);
         }
     }
 }
@@ -246,38 +296,35 @@ pub fn card_stacking_system(
 pub fn add_card_to_stack(
     commands: &mut Commands,
     card_entity: Entity,
-    card: &Card,
-    bottom_entity: Entity,
-    bottom_card: &Card,
+    bottom_card_of_stack: Entity,
 ) {
-    let mut stacked_card = card.clone();
-    stacked_card.previous_in_stack = Some(bottom_entity);
-    let mut stacked_bottom_card = bottom_card.clone();
-    stacked_bottom_card.next_in_stack = Some(card_entity);
-
     // Put this card in front of the parent.
     let new_transform = Transform::from_xyz(0., -CARD_STACK_Y_SPACING, DELTA_Z);
 
     commands
-        .entity(bottom_entity)
+        .entity(bottom_card_of_stack)
         .add_child(card_entity)
-        .insert(stacked_bottom_card);
+        .insert(NextCardInStack(card_entity));
     commands
         .entity(card_entity)
-        .insert(stacked_card)
+        .remove::<CardStackRoot>()
         .insert(new_transform);
 }
 
 /// Slowly nudges cards that are not dragged, until they don't overlap.
 pub fn card_overlap_nudging_system(
     time: Res<Time>,
-    mut undragged_cards: Query<
+    mut undragged_stacks: Query<
         (&GlobalTransform, &mut Transform),
-        (With<Card>, Without<CardRelativeDragPosition>),
+        (
+            With<Card>,
+            With<CardStackRoot>,
+            Without<CardRelativeDragPosition>,
+        ),
     >,
     card_visual_size: Res<CardVisualSize>,
 ) {
-    let mut combinations = undragged_cards.iter_combinations_mut();
+    let mut combinations = undragged_stacks.iter_combinations_mut();
     while let Some([(global_transform1, mut transform1), (global_transform2, mut transform2)]) =
         combinations.fetch_next()
     {
