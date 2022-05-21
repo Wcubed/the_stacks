@@ -1,3 +1,4 @@
+use crate::card_types::CardType;
 use crate::GameState;
 use bevy::math::{const_vec2, const_vec3};
 use bevy::prelude::*;
@@ -22,9 +23,7 @@ const DELTA_Z: f32 = 0.001;
 /// How much of the previous card you can see when stacking cards.
 const CARD_STACK_Y_SPACING: f32 = 50.0;
 
-const CARD_COLOR: Color = Color::rgb(0.15, 0.15, 0.65);
-/// TODO (Wybe 2022-05-14): Convert this into an overlay somehow, instead of changing the card sprite color.
-const CARD_HOVER_COLOR: Color = Color::rgb(0.25, 0.25, 0.75);
+const CARD_HOVER_OVERLAY_COLOR: Color = Color::rgba(1., 1., 1., 0.1);
 const CARD_FOREGROUND_COLOR: Color = Color::rgb(0.8, 0.8, 0.8);
 
 pub struct CardPlugin;
@@ -74,40 +73,49 @@ pub struct CardFonts {
 /// Resource which indicates where in the world the mouse currently is.
 pub struct MouseWorldPos(Option<Vec2>);
 
+/// Resource indicating how large the card texture looks on-screen.
+#[derive(Deref, DerefMut)]
+pub struct CardVisualSize(Vec2);
+
 #[derive(Component)]
 pub struct Card {
     title: String,
+    card_type: CardType,
 }
 
+/// Marks an entity that shows a card is being hovered.
+#[derive(Component)]
+pub struct IsCardHoverOverlay;
+
+/// Marks cards which should have physics applied.
 #[derive(Component)]
 pub struct CardPhysics;
 
-#[derive(Component)]
 /// Indicates this is the topmost (root) card of a stack of cards.
 /// All individual cards are root cards.
 /// Contains the list of cards in the stack, starting from the root.
 /// TODO (Wybe 2022-05-15): Write extensive tests for stacking and un-stacking.
+#[derive(Component)]
 pub struct CardsInStack(Vec<Entity>);
 
+/// Indicates this is the bottom card in a stack,
+/// which means it can have more cards dropped on top of it.
 #[derive(Component)]
 pub struct IsBottomCardOfStack;
 
-#[derive(Component)]
 /// Points to the root card of a stack.
 /// When this card is the root, this points to itself.
+#[derive(Component)]
 pub struct RootCardOfThisStack(Entity);
 
 #[derive(Component, Deref, DerefMut)]
 pub struct CardRelativeDragPosition(Vec2);
 
-#[derive(Component)]
 /// Indicates a card is being hovered with the mouse.
+#[derive(Component)]
 pub struct HoveredCard {
     relative_hover_pos: Vec2,
 }
-
-#[derive(Deref, DerefMut)]
-pub struct CardVisualSize(Vec2);
 
 /// Event sent by the [card_mouse_drag_system] when the user drops a card.
 pub struct CardDroppedEvent(Entity, GlobalTransform);
@@ -131,10 +139,22 @@ pub fn spawn_test_cards(
     card_images: Res<CardImages>,
     card_fonts: Res<CardFonts>,
 ) {
-    for i in 0..10 {
+    for i in 0..5 {
         spawn_card(
             &mut commands,
-            &format!("Card {}", i),
+            &format!("Tree {}", i),
+            CardType::Nature,
+            &visual_size,
+            &card_images,
+            &card_fonts,
+        );
+    }
+
+    for i in 0..5 {
+        spawn_card(
+            &mut commands,
+            &format!("Stone {}", i),
+            CardType::Resource,
             &visual_size,
             &card_images,
             &card_fonts,
@@ -145,6 +165,7 @@ pub fn spawn_test_cards(
 pub fn spawn_card(
     commands: &mut Commands,
     title: &str,
+    card_type: CardType,
     visual_size: &Res<CardVisualSize>,
     card_images: &Res<CardImages>,
     card_fonts: &Res<CardFonts>,
@@ -155,13 +176,14 @@ pub fn spawn_card(
         .spawn_bundle(SpriteBundle {
             texture: card_images.background.clone(),
             sprite: Sprite {
-                color: CARD_COLOR,
+                color: card_type.background_color(),
                 ..default()
             },
             ..default()
         })
         .insert(Card {
             title: title.to_owned(),
+            card_type,
         })
         .insert(IsBottomCardOfStack)
         .insert(CardPhysics)
@@ -265,6 +287,7 @@ pub fn card_mouse_drag_system(
     }
 }
 
+/// Relies on the [card_hover_system] to supply info on which card is being hovered.
 pub fn card_mouse_pickup_system(
     mut commands: Commands,
     mouse_button: Res<Input<MouseButton>>,
@@ -306,54 +329,51 @@ pub fn card_mouse_pickup_system(
 pub fn card_hover_system(
     mut commands: Commands,
     maybe_mouse_world_pos: Res<MouseWorldPos>,
-    mut card_query: Query<(Entity, &GlobalTransform, &mut Sprite), With<Card>>,
+    card_query: Query<(Entity, &GlobalTransform), With<Card>>,
     dragged_card_query: Query<(Entity, &CardRelativeDragPosition), With<Card>>,
+    mut card_hover_overlay_query: Query<Entity, With<IsCardHoverOverlay>>,
     card_visual_size: Res<CardVisualSize>,
+    card_images: Res<CardImages>,
 ) {
     if let Some(mouse_world_pos) = maybe_mouse_world_pos.0 {
         let mut hovered_card = None;
 
         if let Ok((dragged_card, relative_drag_pos)) = dragged_card_query.get_single() {
             // User is dragging a card. Then this is by definition the card they are hovering.
-            hovered_card = Some((dragged_card, relative_drag_pos.0, 0.0));
+            let (_, global_transform) = card_query.get(dragged_card).unwrap();
+            hovered_card = Some((dragged_card, relative_drag_pos.0, global_transform));
         } else {
             // User isn't dragging a card. See which they are hovering.
 
-            for (entity, transform, _) in card_query.iter_mut() {
+            for (entity, transform) in card_query.iter() {
                 if let Some(relative_pos) =
                     in_bounds(card_visual_size.0, transform, mouse_world_pos)
                 {
-                    if let Some((_, _, highest_z)) = hovered_card {
-                        if highest_z < transform.translation.z {
-                            hovered_card = Some((entity, relative_pos, transform.translation.z));
+                    if let Some((_, _, highest_transform)) = hovered_card {
+                        if highest_transform.translation.z < transform.translation.z {
+                            hovered_card = Some((entity, relative_pos, transform));
                         }
                     } else {
-                        hovered_card = Some((entity, relative_pos, transform.translation.z));
+                        hovered_card = Some((entity, relative_pos, transform));
                     }
                 }
             }
         }
 
         if let Some((hovered_entity, relative_pos, _)) = &hovered_card {
-            let mut topmost_sprite = card_query
-                .get_component_mut::<Sprite>(*hovered_entity)
-                .unwrap();
-            topmost_sprite.color = CARD_HOVER_COLOR;
-
             commands.entity(*hovered_entity).insert(HoveredCard {
                 relative_hover_pos: *relative_pos,
             });
         }
 
-        // Clear all other hovers, so we don't leave stray ones lying around.
-        for (entity, _, mut sprite) in card_query.iter_mut() {
+        // Clear all other hover markers, so there aren't any stray ones lying around.
+        for (entity, _) in card_query.iter() {
             if let Some((hovered_entity, _, _)) = hovered_card {
                 if entity == hovered_entity {
                     continue;
                 }
             }
 
-            sprite.color = CARD_COLOR;
             commands.entity(entity).remove::<HoveredCard>();
         }
     }
@@ -435,7 +455,7 @@ pub fn add_card_to_stack(
     let &bottom_card_of_target_stack = target_stack.last().unwrap();
 
     // Put this card in front of the parent.
-    let new_transform = Transform::from_xyz(0., -CARD_STACK_Y_SPACING, DELTA_Z);
+    let new_transform = Transform::from_xyz(0., -CARD_STACK_Y_SPACING, DELTA_Z * 2.);
 
     commands
         .entity(bottom_card_of_target_stack)

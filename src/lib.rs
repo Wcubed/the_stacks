@@ -1,5 +1,6 @@
 mod camera;
 mod card;
+mod card_types;
 
 use crate::camera::OrthographicCameraPlugin;
 use crate::card::CardPlugin;
