@@ -37,6 +37,7 @@ impl Plugin for CardPlugin {
 
         app.add_event::<CardDroppedEvent>()
             .add_event::<CardPickedUpEvent>()
+            .insert_resource(MouseWorldPos(None))
             .add_system_set(
                 SystemSet::on_exit(GameState::AssetLoading).with_system(on_assets_loaded),
             )
@@ -48,7 +49,8 @@ impl Plugin for CardPlugin {
                     .with_system(card_overlap_nudging_system)
                     .with_system(card_stacking_system)
                     .with_system(card_stack_splitting_system),
-            );
+            )
+            .add_system_to_stage(CoreStage::PreUpdate, mouse_world_pos_update_system);
     }
 }
 
@@ -59,6 +61,9 @@ pub struct CardImages {
     #[asset(path = "vector_images/card_border.png")]
     border: Handle<Image>,
 }
+
+/// Resource which indicates where in the world the mouse currently is.
+pub struct MouseWorldPos(Option<Vec2>);
 
 #[derive(Component)]
 pub struct Card;
@@ -143,11 +148,33 @@ pub fn spawn_card(commands: &mut Commands, card_images: &Res<CardImages>) {
         });
 }
 
-pub fn card_mouse_drag_system(
-    mut commands: Commands,
-    mouse_button: Res<Input<MouseButton>>,
+/// Should be added to [PreUpdate](CoreStage::PreUpdate) to make sure the mouse position is
+/// up-to-date when the rest of the systems run.
+pub fn mouse_world_pos_update_system(
     windows: Res<Windows>,
     camera_query: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
+    mut mouse_world_pos: ResMut<MouseWorldPos>,
+) {
+    let primary_window = windows.get_primary().expect("No primary window!");
+
+    if let (Ok((camera, camera_transform)), Some(mouse_window_pos)) =
+        (camera_query.get_single(), primary_window.cursor_position())
+    {
+        mouse_world_pos.0 = Some(window_pos_to_world_pos(
+            camera,
+            camera_transform,
+            primary_window,
+            mouse_window_pos,
+        ));
+    } else {
+        mouse_world_pos.0 = None;
+    }
+}
+
+pub fn card_mouse_drag_system(
+    mut commands: Commands,
+    maybe_mouse_world_pos: Res<MouseWorldPos>,
+    mouse_button: Res<Input<MouseButton>>,
     hovered_but_not_dragged_card_query: Query<
         (Entity, &HoveredCard),
         (With<Card>, Without<CardRelativeDragPosition>),
@@ -164,13 +191,7 @@ pub fn card_mouse_drag_system(
     mut card_dropped_writer: EventWriter<CardDroppedEvent>,
     mut card_picked_up_writer: EventWriter<CardPickedUpEvent>,
 ) {
-    let primary_window = windows.get_primary().expect("No primary window!");
-    let (camera, camera_transform) = camera_query.single();
-
-    if let Some(mouse_window_pos) = primary_window.cursor_position() {
-        let mouse_world_pos =
-            window_pos_to_world_pos(camera, camera_transform, primary_window, mouse_window_pos);
-
+    if let Some(mouse_world_pos) = maybe_mouse_world_pos.0 {
         // Check for newly dragged cards.
         for (entity, hovered_card) in hovered_but_not_dragged_card_query.iter() {
             if mouse_button.just_pressed(MouseButton::Left) {
@@ -207,18 +228,11 @@ pub fn card_mouse_drag_system(
 
 pub fn card_hover_system(
     mut commands: Commands,
-    windows: Res<Windows>,
-    camera_query: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
+    maybe_mouse_world_pos: Res<MouseWorldPos>,
     mut card_query: Query<(Entity, &GlobalTransform, &mut Sprite), With<Card>>,
     card_visual_size: Res<CardVisualSize>,
 ) {
-    let primary_window = windows.get_primary().expect("No primary window!");
-    let (camera, camera_transform) = camera_query.single();
-
-    if let Some(mouse_window_pos) = primary_window.cursor_position() {
-        let mouse_world_pos =
-            window_pos_to_world_pos(camera, camera_transform, primary_window, mouse_window_pos);
-
+    if let Some(mouse_world_pos) = maybe_mouse_world_pos.0 {
         let mut topmost_card = None;
 
         for (entity, transform, _) in card_query.iter_mut() {
@@ -426,6 +440,9 @@ pub fn split_stack(
 }
 
 /// Slowly nudges cards that are not dragged, until they don't overlap.
+/// TODO (Wybe 2022-05-21): This currently nudges cards that were just dropped, but not yet added to a stack.
+///      It would probably be better to add dropped cards to a stack right away. And to remove picked up cards from a stack right away,
+///      instead of next frame.
 pub fn card_overlap_nudging_system(
     time: Res<Time>,
     mut undragged_stacks: Query<
