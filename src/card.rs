@@ -20,7 +20,7 @@ const CARD_OVERLAP_SPACING: Vec2 = const_vec2!([10.0, 10.0]);
 const DELTA_Z: f32 = 0.001;
 
 /// How much of the previous card you can see when stacking cards.
-const CARD_STACK_Y_SPACING: f32 = 30.0;
+const CARD_STACK_Y_SPACING: f32 = 50.0;
 
 const CARD_COLOR: Color = Color::rgb(0.25, 0.25, 0.75);
 /// TODO (Wybe 2022-05-14): Convert this into an overlay somehow, instead of changing the card sprite color.
@@ -261,24 +261,34 @@ pub fn card_hover_system(
     mut commands: Commands,
     maybe_mouse_world_pos: Res<MouseWorldPos>,
     mut card_query: Query<(Entity, &GlobalTransform, &mut Sprite), With<Card>>,
+    dragged_card_query: Query<(Entity, &CardRelativeDragPosition), With<Card>>,
     card_visual_size: Res<CardVisualSize>,
 ) {
     if let Some(mouse_world_pos) = maybe_mouse_world_pos.0 {
-        let mut topmost_card = None;
+        let mut hovered_card = None;
 
-        for (entity, transform, _) in card_query.iter_mut() {
-            if let Some(relative_pos) = in_bounds(card_visual_size.0, transform, mouse_world_pos) {
-                if let Some((_, _, highest_z)) = topmost_card {
-                    if highest_z < transform.translation.z {
-                        topmost_card = Some((entity, relative_pos, transform.translation.z));
+        if let Ok((dragged_card, relative_drag_pos)) = dragged_card_query.get_single() {
+            // User is dragging a card. Then this is by definition the card they are hovering.
+            hovered_card = Some((dragged_card, relative_drag_pos.0, 0.0));
+        } else {
+            // User isn't dragging a card. See which they are hovering.
+
+            for (entity, transform, _) in card_query.iter_mut() {
+                if let Some(relative_pos) =
+                    in_bounds(card_visual_size.0, transform, mouse_world_pos)
+                {
+                    if let Some((_, _, highest_z)) = hovered_card {
+                        if highest_z < transform.translation.z {
+                            hovered_card = Some((entity, relative_pos, transform.translation.z));
+                        }
+                    } else {
+                        hovered_card = Some((entity, relative_pos, transform.translation.z));
                     }
-                } else {
-                    topmost_card = Some((entity, relative_pos, transform.translation.z));
                 }
             }
         }
 
-        if let Some((hovered_entity, relative_pos, _)) = &topmost_card {
+        if let Some((hovered_entity, relative_pos, _)) = &hovered_card {
             let mut topmost_sprite = card_query
                 .get_component_mut::<Sprite>(*hovered_entity)
                 .unwrap();
@@ -291,7 +301,7 @@ pub fn card_hover_system(
 
         // Clear all other hovers, so we don't leave stray ones lying around.
         for (entity, _, mut sprite) in card_query.iter_mut() {
-            if let Some((hovered_entity, _, _)) = topmost_card {
+            if let Some((hovered_entity, _, _)) = hovered_card {
                 if entity == hovered_entity {
                     continue;
                 }
