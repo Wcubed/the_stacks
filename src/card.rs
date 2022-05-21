@@ -22,10 +22,10 @@ const DELTA_Z: f32 = 0.001;
 /// How much of the previous card you can see when stacking cards.
 const CARD_STACK_Y_SPACING: f32 = 50.0;
 
-const CARD_COLOR: Color = Color::rgb(0.25, 0.25, 0.75);
+const CARD_COLOR: Color = Color::rgb(0.15, 0.15, 0.65);
 /// TODO (Wybe 2022-05-14): Convert this into an overlay somehow, instead of changing the card sprite color.
-const CARD_HOVER_COLOR: Color = Color::rgb(0.35, 0.35, 0.85);
-const CARD_BORDER_COLOR: Color = Color::BLACK;
+const CARD_HOVER_COLOR: Color = Color::rgb(0.25, 0.25, 0.75);
+const CARD_FOREGROUND_COLOR: Color = Color::rgb(0.8, 0.8, 0.8);
 
 pub struct CardPlugin;
 
@@ -34,6 +34,7 @@ impl Plugin for CardPlugin {
         AssetLoader::new(GameState::AssetLoading)
             .continue_to_state(GameState::Run)
             .with_collection::<CardImages>()
+            .with_collection::<CardFonts>()
             .build(app);
 
         app.add_event::<CardDroppedEvent>()
@@ -59,9 +60,15 @@ impl Plugin for CardPlugin {
 #[derive(AssetCollection)]
 pub struct CardImages {
     #[asset(path = "vector_images/card_background.png")]
-    pub(crate) background: Handle<Image>,
+    background: Handle<Image>,
     #[asset(path = "vector_images/card_border.png")]
     border: Handle<Image>,
+}
+
+#[derive(AssetCollection)]
+pub struct CardFonts {
+    #[asset(path = "fonts/FallingSky-JKwK.otf")]
+    title: Handle<Font>,
 }
 
 /// Resource which indicates where in the world the mouse currently is.
@@ -116,13 +123,25 @@ pub fn on_assets_loaded(
     commands.insert_resource(CardVisualSize(card_background.size()));
 }
 
-pub fn spawn_test_cards(mut commands: Commands, card_images: Res<CardImages>) {
+pub fn spawn_test_cards(
+    mut commands: Commands,
+    visual_size: Res<CardVisualSize>,
+    card_images: Res<CardImages>,
+    card_fonts: Res<CardFonts>,
+) {
     for _ in 0..10 {
-        spawn_card(&mut commands, &card_images);
+        spawn_card(&mut commands, &visual_size, &card_images, &card_fonts);
     }
 }
 
-pub fn spawn_card(commands: &mut Commands, card_images: &Res<CardImages>) {
+pub fn spawn_card(
+    commands: &mut Commands,
+    visual_size: &Res<CardVisualSize>,
+    card_images: &Res<CardImages>,
+    card_fonts: &Res<CardFonts>,
+) {
+    let title_y_pos = 0.5 * (visual_size.0.y - CARD_STACK_Y_SPACING);
+
     let id = commands
         .spawn_bundle(SpriteBundle {
             texture: card_images.background.clone(),
@@ -140,9 +159,25 @@ pub fn spawn_card(commands: &mut Commands, card_images: &Res<CardImages>) {
                 texture: card_images.border.clone(),
                 transform: Transform::from_xyz(0.0, 0.0, DELTA_Z),
                 sprite: Sprite {
-                    color: CARD_BORDER_COLOR,
+                    color: CARD_FOREGROUND_COLOR,
                     ..default()
                 },
+                ..default()
+            });
+            parent.spawn_bundle(Text2dBundle {
+                text: Text::with_section(
+                    "Card",
+                    TextStyle {
+                        font: card_fonts.title.clone(),
+                        font_size: CARD_STACK_Y_SPACING,
+                        color: CARD_FOREGROUND_COLOR,
+                    },
+                    TextAlignment {
+                        vertical: VerticalAlign::Center,
+                        horizontal: HorizontalAlign::Center,
+                    },
+                ),
+                transform: Transform::from_xyz(0.0, title_y_pos, DELTA_Z),
                 ..default()
             });
         })
