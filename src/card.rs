@@ -189,7 +189,6 @@ pub fn card_mouse_drop_system(
 ) {
     if mouse_button.just_released(MouseButton::Left) {
         for (card, mut transform, global_transform) in dragged_card_query.iter_mut() {
-            info!("Card just dropped: {:?}", card);
             commands.entity(card).remove::<CardRelativeDragPosition>();
             transform.translation.z = CARD_Z;
             transform.scale = Vec3::ONE;
@@ -467,12 +466,12 @@ pub fn stack_overlap_nudging_system(
         let stack1_wanted_space =
             stack_visual_size(card_visual_size.0, cards_in_stack1.len()) + CARD_OVERLAP_SPACING;
         let mut stack1_center = global_transform1.translation.truncate();
-        stack1_center.y -= cards_in_stack1.len() as f32 * CARD_STACK_Y_SPACING;
+        stack1_center.y -= 0.5 * cards_in_stack1.len() as f32 * CARD_STACK_Y_SPACING;
 
         let stack2_wanted_space =
             stack_visual_size(card_visual_size.0, cards_in_stack2.len()) + CARD_OVERLAP_SPACING;
         let mut stack2_center = global_transform2.translation.truncate();
-        stack2_center.y -= cards_in_stack2.len() as f32 * CARD_STACK_Y_SPACING;
+        stack2_center.y -= 0.5 * cards_in_stack2.len() as f32 * CARD_STACK_Y_SPACING;
 
         // TODO (Wybe 2022-05-14): Should we account for scaling and rotation?
         if let Some(total_movement) = get_movement_to_no_longer_overlap(
