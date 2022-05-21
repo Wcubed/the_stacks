@@ -38,6 +38,7 @@ impl Plugin for CardPlugin {
         app.add_event::<CardDroppedEvent>()
             .add_event::<CardPickedUpEvent>()
             .insert_resource(MouseWorldPos(None))
+            .add_system_to_stage(CoreStage::PreUpdate, mouse_world_pos_update_system)
             .add_system_set(
                 SystemSet::on_exit(GameState::AssetLoading).with_system(on_assets_loaded),
             )
@@ -45,12 +46,13 @@ impl Plugin for CardPlugin {
             .add_system_set(
                 SystemSet::on_update(GameState::Run)
                     .with_system(card_mouse_drag_system)
+                    .with_system(card_mouse_pickup_system)
+                    .with_system(card_mouse_drop_system)
                     .with_system(card_hover_system)
                     .with_system(card_overlap_nudging_system)
                     .with_system(card_stacking_system)
                     .with_system(card_stack_splitting_system),
-            )
-            .add_system_to_stage(CoreStage::PreUpdate, mouse_world_pos_update_system);
+            );
     }
 }
 
@@ -171,14 +173,9 @@ pub fn mouse_world_pos_update_system(
     }
 }
 
-pub fn card_mouse_drag_system(
+pub fn card_mouse_drop_system(
     mut commands: Commands,
-    maybe_mouse_world_pos: Res<MouseWorldPos>,
     mouse_button: Res<Input<MouseButton>>,
-    hovered_but_not_dragged_card_query: Query<
-        (Entity, &HoveredCard),
-        (With<Card>, Without<CardRelativeDragPosition>),
-    >,
     mut dragged_card_query: Query<
         (
             Entity,
@@ -189,39 +186,47 @@ pub fn card_mouse_drag_system(
         With<Card>,
     >,
     mut card_dropped_writer: EventWriter<CardDroppedEvent>,
-    mut card_picked_up_writer: EventWriter<CardPickedUpEvent>,
+) {
+    if mouse_button.just_released(MouseButton::Left) {
+        for (card, mut transform, global_transform, drag_position) in dragged_card_query.iter_mut()
+        {
+            commands.entity(card).remove::<CardRelativeDragPosition>();
+            transform.translation.z = CARD_Z;
+            transform.scale = Vec3::ONE;
+
+            card_dropped_writer.send(CardDroppedEvent(card, *global_transform));
+        }
+    }
+}
+
+pub fn card_mouse_drag_system(
+    maybe_mouse_world_pos: Res<MouseWorldPos>,
+    mut dragged_card_query: Query<(&mut Transform, &CardRelativeDragPosition), With<Card>>,
 ) {
     if let Some(mouse_world_pos) = maybe_mouse_world_pos.0 {
-        // Check for newly dragged cards.
-        for (entity, hovered_card) in hovered_but_not_dragged_card_query.iter() {
-            if mouse_button.just_pressed(MouseButton::Left) {
-                commands
-                    .entity(entity)
-                    .insert(CardRelativeDragPosition(hovered_card.relative_hover_pos));
-
-                card_picked_up_writer.send(CardPickedUpEvent(entity));
-            }
+        for (mut transform, drag_position) in dragged_card_query.iter_mut() {
+            transform.translation = (mouse_world_pos - drag_position.0).extend(CARD_DRAG_Z);
+            transform.scale = CARD_DRAG_SCALE;
         }
+    }
+}
 
-        // In principle there should ever only be 1 hovered card.
-        // But the system can work with multiple if need be.
-        for (entity, mut transform, global_transform, drag_position) in
-            dragged_card_query.iter_mut()
-        {
-            if mouse_button.just_released(MouseButton::Left) {
-                // Drop the cards.
+pub fn card_mouse_pickup_system(
+    mut commands: Commands,
+    mouse_button: Res<Input<MouseButton>>,
+    hovered_but_not_dragged_card_query: Query<
+        (Entity, &HoveredCard),
+        (With<Card>, Without<CardRelativeDragPosition>),
+    >,
+    mut card_picked_up_writer: EventWriter<CardPickedUpEvent>,
+) {
+    if mouse_button.just_pressed(MouseButton::Left) {
+        for (entity, hovered_card) in hovered_but_not_dragged_card_query.iter() {
+            commands
+                .entity(entity)
+                .insert(CardRelativeDragPosition(hovered_card.relative_hover_pos));
 
-                commands.entity(entity).remove::<CardRelativeDragPosition>();
-                transform.translation.z = CARD_Z;
-                transform.scale = Vec3::ONE;
-
-                card_dropped_writer.send(CardDroppedEvent(entity, *global_transform));
-            } else {
-                // Drag the cards.
-
-                transform.translation = (mouse_world_pos - drag_position.0).extend(CARD_DRAG_Z);
-                transform.scale = CARD_DRAG_SCALE;
-            }
+            card_picked_up_writer.send(CardPickedUpEvent(entity));
         }
     }
 }
