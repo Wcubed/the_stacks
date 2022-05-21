@@ -16,6 +16,7 @@ pub struct TheStacksPlugin;
 impl Plugin for TheStacksPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(Msaa { samples: 4 })
+            .insert_resource(ClearColor(Color::BLACK))
             .add_state(GameState::AssetLoading)
             .add_plugin(CardPlugin)
             .add_plugin(OrthographicCameraPlugin);

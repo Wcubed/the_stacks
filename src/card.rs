@@ -75,7 +75,9 @@ pub struct CardFonts {
 pub struct MouseWorldPos(Option<Vec2>);
 
 #[derive(Component)]
-pub struct Card;
+pub struct Card {
+    title: String,
+}
 
 #[derive(Component)]
 pub struct CardPhysics;
@@ -129,13 +131,20 @@ pub fn spawn_test_cards(
     card_images: Res<CardImages>,
     card_fonts: Res<CardFonts>,
 ) {
-    for _ in 0..10 {
-        spawn_card(&mut commands, &visual_size, &card_images, &card_fonts);
+    for i in 0..10 {
+        spawn_card(
+            &mut commands,
+            &format!("Card {}", i),
+            &visual_size,
+            &card_images,
+            &card_fonts,
+        );
     }
 }
 
 pub fn spawn_card(
     commands: &mut Commands,
+    title: &str,
     visual_size: &Res<CardVisualSize>,
     card_images: &Res<CardImages>,
     card_fonts: &Res<CardFonts>,
@@ -151,7 +160,9 @@ pub fn spawn_card(
             },
             ..default()
         })
-        .insert(Card)
+        .insert(Card {
+            title: title.to_owned(),
+        })
         .insert(IsBottomCardOfStack)
         .insert(CardPhysics)
         .with_children(|parent| {
@@ -166,7 +177,7 @@ pub fn spawn_card(
             });
             parent.spawn_bundle(Text2dBundle {
                 text: Text::with_section(
-                    "Card",
+                    title,
                     TextStyle {
                         font: card_fonts.title.clone(),
                         font_size: CARD_STACK_Y_SPACING,
