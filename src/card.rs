@@ -3,9 +3,10 @@ use bevy::math::{const_vec2, const_vec3};
 use bevy::prelude::*;
 use bevy::render::camera::Camera2d;
 use bevy_asset_loader::{AssetCollection, AssetLoader};
+use std::collections::HashSet;
 
 const CARD_Z: f32 = 1.0;
-const CARD_DRAG_Z: f32 = 2.0;
+const CARD_DRAG_Z: f32 = 200.0;
 /// Extra scaling a card gets when a user "picks it up".
 /// This should help in giving the illusion of the card being above the other cards.
 const CARD_DRAG_SCALE: Vec3 = const_vec3!([1.1, 1.1, 1.]);
@@ -49,7 +50,7 @@ impl Plugin for CardPlugin {
                     .with_system(card_mouse_pickup_system)
                     .with_system(card_mouse_drop_system)
                     .with_system(card_hover_system)
-                    .with_system(stack_overlap_system)
+                    .with_system(stack_overlap_nudging_system)
                     .with_system(card_stacking_system),
             );
     }
@@ -181,19 +182,14 @@ pub fn card_mouse_drop_system(
     mut commands: Commands,
     mouse_button: Res<Input<MouseButton>>,
     mut dragged_card_query: Query<
-        (
-            Entity,
-            &mut Transform,
-            &GlobalTransform,
-            &CardRelativeDragPosition,
-        ),
-        With<Card>,
+        (Entity, &mut Transform, &GlobalTransform),
+        (With<Card>, With<CardRelativeDragPosition>),
     >,
     mut card_dropped_writer: EventWriter<CardDroppedEvent>,
 ) {
     if mouse_button.just_released(MouseButton::Left) {
-        for (card, mut transform, global_transform, drag_position) in dragged_card_query.iter_mut()
-        {
+        for (card, mut transform, global_transform) in dragged_card_query.iter_mut() {
+            info!("Card just dropped: {:?}", card);
             commands.entity(card).remove::<CardRelativeDragPosition>();
             transform.translation.z = CARD_Z;
             transform.scale = Vec3::ONE;
@@ -205,10 +201,19 @@ pub fn card_mouse_drop_system(
 
 pub fn card_mouse_drag_system(
     maybe_mouse_world_pos: Res<MouseWorldPos>,
-    mut dragged_card_query: Query<(&mut Transform, &CardRelativeDragPosition), With<Card>>,
+    mut dragged_card_query: Query<(Entity, &mut Transform, &CardRelativeDragPosition), With<Card>>,
+    mut card_dropped_reader: EventReader<CardDroppedEvent>,
 ) {
     if let Some(mouse_world_pos) = maybe_mouse_world_pos.0 {
-        for (mut transform, drag_position) in dragged_card_query.iter_mut() {
+        let dropped_cards: HashSet<Entity> =
+            card_dropped_reader.iter().map(|entry| entry.0).collect();
+
+        for (card, mut transform, drag_position) in dragged_card_query.iter_mut() {
+            if dropped_cards.contains(&card) {
+                // Shouldn't drag a card around that has just gotten dropped.
+                continue;
+            }
+
             transform.translation = (mouse_world_pos - drag_position.0).extend(CARD_DRAG_Z);
             transform.scale = CARD_DRAG_SCALE;
         }
@@ -446,26 +451,35 @@ pub fn split_stack(
 /// TODO (Wybe 2022-05-21): This currently nudges cards that were just dropped, but not yet added to a stack.
 ///      It would probably be better to add dropped cards to a stack right away. And to remove picked up cards from a stack right away,
 ///      instead of next frame.
-pub fn stack_overlap_system(
+pub fn stack_overlap_nudging_system(
     time: Res<Time>,
     mut physics_stacks: Query<
-        (&GlobalTransform, &mut Transform),
-        (With<Card>, With<CardsInStack>, With<CardPhysics>),
+        (&GlobalTransform, &mut Transform, &CardsInStack),
+        (With<Card>, With<CardPhysics>),
     >,
     card_visual_size: Res<CardVisualSize>,
 ) {
     let mut combinations = physics_stacks.iter_combinations_mut();
-    while let Some([(global_transform1, mut transform1), (global_transform2, mut transform2)]) =
-        combinations.fetch_next()
+    while let Some(
+        [(global_transform1, mut transform1, CardsInStack(cards_in_stack1)), (global_transform2, mut transform2, CardsInStack(cards_in_stack2))],
+    ) = combinations.fetch_next()
     {
-        let card_wanted_space = card_visual_size.0 + CARD_OVERLAP_SPACING;
+        let stack1_wanted_space =
+            stack_visual_size(card_visual_size.0, cards_in_stack1.len()) + CARD_OVERLAP_SPACING;
+        let mut stack1_center = global_transform1.translation.truncate();
+        stack1_center.y -= cards_in_stack1.len() as f32 * CARD_STACK_Y_SPACING;
+
+        let stack2_wanted_space =
+            stack_visual_size(card_visual_size.0, cards_in_stack2.len()) + CARD_OVERLAP_SPACING;
+        let mut stack2_center = global_transform2.translation.truncate();
+        stack2_center.y -= cards_in_stack2.len() as f32 * CARD_STACK_Y_SPACING;
 
         // TODO (Wybe 2022-05-14): Should we account for scaling and rotation?
         if let Some(total_movement) = get_movement_to_no_longer_overlap(
-            global_transform1.translation.truncate(),
-            card_wanted_space,
-            global_transform2.translation.truncate(),
-            card_wanted_space,
+            stack1_center,
+            stack1_wanted_space,
+            stack2_center,
+            stack2_wanted_space,
         ) {
             let max_movement_this_frame = CARD_OVERLAP_MOVEMENT * time.delta_seconds();
 
@@ -479,6 +493,13 @@ pub fn stack_overlap_system(
             transform2.translation -= movement;
         }
     }
+}
+
+fn stack_visual_size(single_card_visual_size: Vec2, cards_in_stack: usize) -> Vec2 {
+    Vec2::new(
+        single_card_visual_size.x,
+        single_card_visual_size.y + (cards_in_stack as f32 * CARD_STACK_Y_SPACING),
+    )
 }
 
 fn window_pos_to_world_pos(
