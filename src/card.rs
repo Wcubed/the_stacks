@@ -49,7 +49,7 @@ impl Plugin for CardPlugin {
                     .with_system(card_mouse_pickup_system)
                     .with_system(card_mouse_drop_system)
                     .with_system(card_hover_system)
-                    .with_system(card_overlap_nudging_system)
+                    .with_system(stack_overlap_system)
                     .with_system(card_stacking_system),
             );
     }
@@ -68,6 +68,9 @@ pub struct MouseWorldPos(Option<Vec2>);
 
 #[derive(Component)]
 pub struct Card;
+
+#[derive(Component)]
+pub struct CardPhysics;
 
 #[derive(Component)]
 /// Indicates this is the topmost (root) card of a stack of cards.
@@ -130,12 +133,7 @@ pub fn spawn_card(commands: &mut Commands, card_images: &Res<CardImages>) {
         })
         .insert(Card)
         .insert(IsBottomCardOfStack)
-        .id();
-
-    commands
-        .entity(id)
-        .insert(RootCardOfThisStack(id))
-        .insert(CardsInStack(vec![id]))
+        .insert(CardPhysics)
         .with_children(|parent| {
             parent.spawn_bundle(SpriteBundle {
                 texture: card_images.border.clone(),
@@ -146,7 +144,14 @@ pub fn spawn_card(commands: &mut Commands, card_images: &Res<CardImages>) {
                 },
                 ..default()
             });
-        });
+        })
+        .id();
+
+    // Add the components that rely on knowing the entity id.
+    commands
+        .entity(id)
+        .insert(RootCardOfThisStack(id))
+        .insert(CardsInStack(vec![id]));
 }
 
 /// Should be added to [PreUpdate](CoreStage::PreUpdate) to make sure the mouse position is
@@ -224,7 +229,8 @@ pub fn card_mouse_pickup_system(
         for (picked_up_card, hovered_card) in hovered_but_not_dragged_card_query.iter() {
             commands
                 .entity(picked_up_card)
-                .insert(CardRelativeDragPosition(hovered_card.relative_hover_pos));
+                .insert(CardRelativeDragPosition(hovered_card.relative_hover_pos))
+                .remove::<CardPhysics>();
 
             if let Ok((RootCardOfThisStack(root_card), picked_up_global_transform)) =
                 root_card_transforms.get(picked_up_card)
@@ -344,6 +350,9 @@ pub fn card_stacking_system(
             {
                 add_card_to_stack(&mut commands, &source_stack.0, &target_stack.0);
             }
+        } else {
+            // Re-enable physics for the card.
+            commands.entity(*dropped_entity).insert(CardPhysics);
         }
     }
 }
@@ -433,23 +442,19 @@ pub fn split_stack(
     }
 }
 
-/// Slowly nudges cards that are not dragged, until they don't overlap.
+/// Slowly nudges stacks with [CardPhysics], until they don't overlap.
 /// TODO (Wybe 2022-05-21): This currently nudges cards that were just dropped, but not yet added to a stack.
 ///      It would probably be better to add dropped cards to a stack right away. And to remove picked up cards from a stack right away,
 ///      instead of next frame.
-pub fn card_overlap_nudging_system(
+pub fn stack_overlap_system(
     time: Res<Time>,
-    mut undragged_stacks: Query<
+    mut physics_stacks: Query<
         (&GlobalTransform, &mut Transform),
-        (
-            With<Card>,
-            With<CardsInStack>,
-            Without<CardRelativeDragPosition>,
-        ),
+        (With<Card>, With<CardsInStack>, With<CardPhysics>),
     >,
     card_visual_size: Res<CardVisualSize>,
 ) {
-    let mut combinations = undragged_stacks.iter_combinations_mut();
+    let mut combinations = physics_stacks.iter_combinations_mut();
     while let Some([(global_transform1, mut transform1), (global_transform2, mut transform2)]) =
         combinations.fetch_next()
     {
