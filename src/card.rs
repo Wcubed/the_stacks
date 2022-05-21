@@ -1,5 +1,6 @@
 use crate::card_types::CardType;
 use crate::GameState;
+use crate::KeyCode::P;
 use bevy::math::{const_vec2, const_vec3};
 use bevy::prelude::*;
 use bevy::render::camera::Camera2d;
@@ -50,6 +51,7 @@ impl Plugin for CardPlugin {
                     .with_system(card_mouse_pickup_system)
                     .with_system(card_mouse_drop_system)
                     .with_system(card_hover_system)
+                    .with_system(card_cursor_system)
                     .with_system(stack_overlap_nudging_system)
                     .with_system(card_stacking_system),
             );
@@ -376,6 +378,22 @@ pub fn card_hover_system(
 
             commands.entity(entity).remove::<HoveredCard>();
         }
+    }
+}
+
+pub fn card_cursor_system(
+    mut windows: ResMut<Windows>,
+    hovered_card_query: Query<Entity, With<HoveredCard>>,
+    dragged_card_query: Query<Entity, With<CardRelativeDragPosition>>,
+) {
+    let primary_window = windows.get_primary_mut().expect("No primary window!");
+
+    if !dragged_card_query.is_empty() {
+        primary_window.set_cursor_icon(CursorIcon::Grabbing);
+    } else if !hovered_card_query.is_empty() {
+        primary_window.set_cursor_icon(CursorIcon::Grab);
+    } else {
+        primary_window.set_cursor_icon(CursorIcon::Default);
     }
 }
 
