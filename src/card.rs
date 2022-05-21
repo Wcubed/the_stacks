@@ -50,8 +50,7 @@ impl Plugin for CardPlugin {
                     .with_system(card_mouse_drop_system)
                     .with_system(card_hover_system)
                     .with_system(card_overlap_nudging_system)
-                    .with_system(card_stacking_system)
-                    .with_system(card_stack_splitting_system),
+                    .with_system(card_stacking_system),
             );
     }
 }
@@ -218,15 +217,32 @@ pub fn card_mouse_pickup_system(
         (Entity, &HoveredCard),
         (With<Card>, Without<CardRelativeDragPosition>),
     >,
-    mut card_picked_up_writer: EventWriter<CardPickedUpEvent>,
+    root_card_transforms: Query<(&RootCardOfThisStack, &GlobalTransform), With<Card>>,
+    stacks: Query<&CardsInStack, With<Card>>,
 ) {
     if mouse_button.just_pressed(MouseButton::Left) {
-        for (entity, hovered_card) in hovered_but_not_dragged_card_query.iter() {
+        for (picked_up_card, hovered_card) in hovered_but_not_dragged_card_query.iter() {
             commands
-                .entity(entity)
+                .entity(picked_up_card)
                 .insert(CardRelativeDragPosition(hovered_card.relative_hover_pos));
 
-            card_picked_up_writer.send(CardPickedUpEvent(entity));
+            if let Ok((RootCardOfThisStack(root_card), picked_up_global_transform)) =
+                root_card_transforms.get(picked_up_card)
+            {
+                if *root_card == picked_up_card {
+                    // No need to split a stack at the root card.
+                    continue;
+                }
+
+                if let Ok(CardsInStack(stack)) = stacks.get(*root_card) {
+                    split_stack(
+                        &mut commands,
+                        stack,
+                        picked_up_card,
+                        picked_up_global_transform,
+                    );
+                }
+            }
         }
     }
 }
@@ -327,33 +343,6 @@ pub fn card_stacking_system(
                 (stacks.get(*dropped_entity), stacks.get(root_card_of_stack))
             {
                 add_card_to_stack(&mut commands, &source_stack.0, &target_stack.0);
-            }
-        }
-    }
-}
-
-pub fn card_stack_splitting_system(
-    mut commands: Commands,
-    stacks: Query<&CardsInStack, With<Card>>,
-    cards: Query<(&RootCardOfThisStack, &GlobalTransform), With<Card>>,
-    mut card_picked_up_reader: EventReader<CardPickedUpEvent>,
-) {
-    for CardPickedUpEvent(card_picked_up) in card_picked_up_reader.iter() {
-        if let Ok((RootCardOfThisStack(root_card), picked_up_global_transform)) =
-            cards.get(*card_picked_up)
-        {
-            if root_card == card_picked_up {
-                // No need to split a stack at the root card.
-                continue;
-            }
-
-            if let Ok(CardsInStack(stack)) = stacks.get(*root_card) {
-                split_stack(
-                    &mut commands,
-                    stack,
-                    *card_picked_up,
-                    picked_up_global_transform,
-                );
             }
         }
     }
