@@ -337,8 +337,8 @@ pub fn card_stacking_system(
             )
             .map(|v| v.length())
             {
-                if let Some((shortest_distance, _)) = closest_drop_target {
-                    if distance < shortest_distance {
+                if let Some((longest_overlap_movement, _)) = closest_drop_target {
+                    if distance > longest_overlap_movement {
                         closest_drop_target = Some((distance, root_card_of_stack.0));
                     }
                 } else {
