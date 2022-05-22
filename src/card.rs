@@ -188,7 +188,7 @@ pub struct CardPhysics;
 /// All individual cards are root cards.
 /// Contains the list of cards in the stack, starting from the root.
 /// TODO (Wybe 2022-05-15): Write extensive tests for stacking and un-stacking.
-#[derive(Component)]
+#[derive(Component, Deref, Debug)]
 pub struct CardsInStack(Vec<Entity>);
 
 /// Indicates this is the bottom card in a stack,
@@ -389,7 +389,10 @@ pub fn card_hover_system(
                 .unwrap();
             for &child in children.iter() {
                 if let Ok(mut visibility) = card_hover_overlay_query.get_mut(child) {
-                    visibility.is_visible = true;
+                    // Don't mutate if not necessary.
+                    if !visibility.is_visible {
+                        visibility.is_visible = true;
+                    }
                 }
             }
         }
@@ -406,7 +409,10 @@ pub fn card_hover_system(
 
             for &child in children.iter() {
                 if let Ok(mut visibility) = card_hover_overlay_query.get_mut(child) {
-                    visibility.is_visible = false;
+                    // Don't mutate if not necessary.
+                    if visibility.is_visible {
+                        visibility.is_visible = false;
+                    }
                 }
             }
         }
