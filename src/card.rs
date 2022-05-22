@@ -80,6 +80,99 @@ pub struct MouseWorldPos(Option<Vec2>);
 #[derive(Deref, DerefMut)]
 pub struct CardVisualSize(Vec2);
 
+/// Resource that contains everything needed to create new cards.
+pub struct CardCreation {
+    background: Handle<Image>,
+    border: Handle<Image>,
+    hover_overlay: Handle<Image>,
+    title_style: TextStyle,
+    title_transform: Transform,
+}
+
+impl CardCreation {
+    pub fn new(images: &CardImages, fonts: &CardFonts, visual_size: Vec2) -> Self {
+        CardCreation {
+            background: images.background.clone(),
+            border: images.border.clone(),
+            hover_overlay: images.hover_overlay.clone(),
+            title_style: TextStyle {
+                font: fonts.title.clone(),
+                font_size: CARD_STACK_Y_SPACING,
+                color: CARD_FOREGROUND_COLOR,
+                ..default()
+            },
+            title_transform: Transform::from_xyz(
+                0.,
+                0.5 * (visual_size.y - CARD_STACK_Y_SPACING),
+                DELTA_Z,
+            ),
+        }
+    }
+
+    pub fn spawn_card(&self, commands: &mut Commands, title: &str, card_type: CardType) {
+        let id = commands
+            .spawn_bundle(SpriteBundle {
+                texture: self.background.clone(),
+                sprite: Sprite {
+                    color: card_type.background_color(),
+                    ..default()
+                },
+                ..default()
+            })
+            .insert(Card {
+                title: title.to_owned(),
+                card_type,
+            })
+            .insert(IsBottomCardOfStack)
+            .insert(CardPhysics)
+            .with_children(|parent| {
+                // Border
+                parent.spawn_bundle(SpriteBundle {
+                    texture: self.border.clone(),
+                    transform: Transform::from_xyz(0.0, 0.0, DELTA_Z),
+                    sprite: Sprite {
+                        color: CARD_FOREGROUND_COLOR,
+                        ..default()
+                    },
+                    ..default()
+                });
+                // Title text
+                parent.spawn_bundle(Text2dBundle {
+                    text: Text::with_section(
+                        title,
+                        self.title_style.clone(),
+                        TextAlignment {
+                            vertical: VerticalAlign::Center,
+                            horizontal: HorizontalAlign::Center,
+                        },
+                    ),
+                    transform: self.title_transform.clone(),
+                    ..default()
+                });
+                // Hover overlay
+                parent
+                    .spawn_bundle(SpriteBundle {
+                        texture: self.hover_overlay.clone(),
+                        sprite: Sprite {
+                            color: CARD_HOVER_OVERLAY_COLOR,
+                            ..default()
+                        },
+                        transform: Transform::from_xyz(0.0, 0.0, DELTA_Z * 1.5),
+                        visibility: Visibility { is_visible: false },
+                        ..default()
+                    })
+                    .insert(IsCardHoverOverlay);
+            })
+            .id();
+
+        // Add the components that rely on knowing the entity id.
+        commands
+            .entity(id)
+            .insert(RootCardOfThisStack(id))
+            .insert(CardsInStack(vec![id]));
+    }
+}
+
 #[derive(Component)]
 pub struct Card {
     title: String,
@@ -129,116 +222,28 @@ pub struct CardPickedUpEvent(Entity);
 pub fn on_assets_loaded(
     mut commands: Commands,
     card_images: Res<CardImages>,
+    card_fonts: Res<CardFonts>,
     images: Res<Assets<Image>>,
 ) {
     // Can call `unwrap()` because the asset_loader will have caught any missing assets already.
     let card_background = images.get(card_images.background.clone()).unwrap();
     commands.insert_resource(CardVisualSize(card_background.size()));
+
+    commands.insert_resource(CardCreation::new(
+        &card_images,
+        &card_fonts,
+        card_background.size(),
+    ));
 }
 
-pub fn spawn_test_cards(
-    mut commands: Commands,
-    visual_size: Res<CardVisualSize>,
-    card_images: Res<CardImages>,
-    card_fonts: Res<CardFonts>,
-) {
-    for i in 0..5 {
-        spawn_card(
-            &mut commands,
-            &format!("Tree {}", i),
-            CardType::Nature,
-            &visual_size,
-            &card_images,
-            &card_fonts,
-        );
+pub fn spawn_test_cards(mut commands: Commands, creation: Res<CardCreation>) {
+    for _ in 0..5 {
+        creation.spawn_card(&mut commands, "Tree", CardType::Nature);
     }
 
-    for i in 0..5 {
-        spawn_card(
-            &mut commands,
-            &format!("Stone {}", i),
-            CardType::Resource,
-            &visual_size,
-            &card_images,
-            &card_fonts,
-        );
+    for _ in 0..5 {
+        creation.spawn_card(&mut commands, "Stone", CardType::Resource);
     }
-}
-
-pub fn spawn_card(
-    commands: &mut Commands,
-    title: &str,
-    card_type: CardType,
-    visual_size: &Res<CardVisualSize>,
-    card_images: &Res<CardImages>,
-    card_fonts: &Res<CardFonts>,
-) {
-    let title_y_pos = 0.5 * (visual_size.0.y - CARD_STACK_Y_SPACING);
-
-    let id = commands
-        .spawn_bundle(SpriteBundle {
-            texture: card_images.background.clone(),
-            sprite: Sprite {
-                color: card_type.background_color(),
-                ..default()
-            },
-            ..default()
-        })
-        .insert(Card {
-            title: title.to_owned(),
-            card_type,
-        })
-        .insert(IsBottomCardOfStack)
-        .insert(CardPhysics)
-        .with_children(|parent| {
-            // Border
-            parent.spawn_bundle(SpriteBundle {
-                texture: card_images.border.clone(),
-                transform: Transform::from_xyz(0.0, 0.0, DELTA_Z),
-                sprite: Sprite {
-                    color: CARD_FOREGROUND_COLOR,
-                    ..default()
-                },
-                ..default()
-            });
-            // Title text
-            parent.spawn_bundle(Text2dBundle {
-                text: Text::with_section(
-                    title,
-                    TextStyle {
-                        font: card_fonts.title.clone(),
-                        font_size: CARD_STACK_Y_SPACING,
-                        color: CARD_FOREGROUND_COLOR,
-                    },
-                    TextAlignment {
-                        vertical: VerticalAlign::Center,
-                        horizontal: HorizontalAlign::Center,
-                    },
-                ),
-                transform: Transform::from_xyz(0.0, title_y_pos, DELTA_Z),
-                ..default()
-            });
-            // Hover overlay
-            parent
-                .spawn_bundle(SpriteBundle {
-                    texture: card_images.hover_overlay.clone(),
-                    sprite: Sprite {
-                        color: CARD_HOVER_OVERLAY_COLOR,
-                        ..default()
-                    },
-                    transform: Transform::from_xyz(0.0, 0.0, DELTA_Z * 1.5),
-                    visibility: Visibility { is_visible: false },
-                    ..default()
-                })
-                .insert(IsCardHoverOverlay);
-        })
-        .id();
-
-    // Add the components that rely on knowing the entity id.
-    commands
-        .entity(id)
-        .insert(RootCardOfThisStack(id))
-        .insert(CardsInStack(vec![id]));
 }
 
 /// Should be added to [PreUpdate](CoreStage::PreUpdate) to make sure the mouse position is
