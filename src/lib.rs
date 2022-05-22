@@ -1,9 +1,11 @@
 mod camera;
 mod card;
 mod card_types;
+mod recipe;
 
 use crate::camera::OrthographicCameraPlugin;
 use crate::card::CardPlugin;
+use crate::recipe::RecipePlugin;
 use bevy::prelude::*;
 
 #[derive(Clone, Eq, PartialEq, Debug, Hash)]
@@ -20,6 +22,7 @@ impl Plugin for TheStacksPlugin {
             .insert_resource(ClearColor(Color::BLACK))
             .add_state(GameState::AssetLoading)
             .add_plugin(CardPlugin)
+            .add_plugin(RecipePlugin)
             .add_plugin(OrthographicCameraPlugin);
     }
 }

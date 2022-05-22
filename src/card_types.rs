@@ -1,6 +1,9 @@
+use crate::card::Card;
 use bevy::prelude::Color;
 
+#[derive(Eq, PartialEq, Clone, Copy)]
 pub enum CardType {
+    Worker,
     Nature,
     Resource,
 }
@@ -8,8 +11,19 @@ pub enum CardType {
 impl CardType {
     pub fn background_color(&self) -> Color {
         match self {
+            CardType::Worker => Color::hsl(25., 0.8, 0.2),
             CardType::Nature => Color::DARK_GREEN,
             CardType::Resource => Color::BLUE,
         }
     }
 }
+
+pub(crate) const TREE: Card = Card {
+    title: "Tree",
+    card_type: CardType::Nature,
+};
+
+pub(crate) const WORKER: Card = Card {
+    title: "Worker",
+    card_type: CardType::Worker,
+};

@@ -1,5 +1,5 @@
 use crate::card_types::CardType;
-use crate::GameState;
+use crate::{card_types, GameState};
 use bevy::math::{const_vec2, const_vec3};
 use bevy::prelude::*;
 use bevy::render::camera::Camera2d;
@@ -109,20 +109,17 @@ impl CardCreation {
         }
     }
 
-    pub fn spawn_card(&self, commands: &mut Commands, title: &str, card_type: CardType) {
+    pub fn spawn_card(&self, commands: &mut Commands, card: Card) {
         let id = commands
             .spawn_bundle(SpriteBundle {
                 texture: self.background.clone(),
                 sprite: Sprite {
-                    color: card_type.background_color(),
+                    color: card.card_type.background_color(),
                     ..default()
                 },
                 ..default()
             })
-            .insert(Card {
-                title: title.to_owned(),
-                card_type,
-            })
+            .insert(card.clone())
             .insert(IsBottomCardOfStack)
             .insert(CardPhysics)
             .with_children(|parent| {
@@ -139,7 +136,7 @@ impl CardCreation {
                 // Title text
                 parent.spawn_bundle(Text2dBundle {
                     text: Text::with_section(
-                        title,
+                        card.title,
                         self.title_style.clone(),
                         TextAlignment {
                             vertical: VerticalAlign::Center,
@@ -173,10 +170,10 @@ impl CardCreation {
     }
 }
 
-#[derive(Component)]
+#[derive(Component, PartialEq, Eq, Clone)]
 pub struct Card {
-    title: String,
-    card_type: CardType,
+    pub(crate) title: &'static str,
+    pub(crate) card_type: CardType,
 }
 
 /// Marks an entity that shows a card is being hovered.
@@ -238,11 +235,11 @@ pub fn on_assets_loaded(
 
 pub fn spawn_test_cards(mut commands: Commands, creation: Res<CardCreation>) {
     for _ in 0..5 {
-        creation.spawn_card(&mut commands, "Tree", CardType::Nature);
+        creation.spawn_card(&mut commands, card_types::WORKER);
     }
 
     for _ in 0..5 {
-        creation.spawn_card(&mut commands, "Stone", CardType::Resource);
+        creation.spawn_card(&mut commands, card_types::TREE);
     }
 }
 
