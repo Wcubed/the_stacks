@@ -1,6 +1,5 @@
 use crate::card_types::CardType;
 use crate::GameState;
-use crate::KeyCode::P;
 use bevy::math::{const_vec2, const_vec3};
 use bevy::prelude::*;
 use bevy::render::camera::Camera2d;
@@ -64,6 +63,8 @@ pub struct CardImages {
     background: Handle<Image>,
     #[asset(path = "vector_images/card_border.png")]
     border: Handle<Image>,
+    #[asset(path = "vector_images/card_hover_overlay.png")]
+    hover_overlay: Handle<Image>,
 }
 
 #[derive(AssetCollection)]
@@ -190,6 +191,7 @@ pub fn spawn_card(
         .insert(IsBottomCardOfStack)
         .insert(CardPhysics)
         .with_children(|parent| {
+            // Border
             parent.spawn_bundle(SpriteBundle {
                 texture: card_images.border.clone(),
                 transform: Transform::from_xyz(0.0, 0.0, DELTA_Z),
@@ -199,6 +201,7 @@ pub fn spawn_card(
                 },
                 ..default()
             });
+            // Title text
             parent.spawn_bundle(Text2dBundle {
                 text: Text::with_section(
                     title,
@@ -215,6 +218,19 @@ pub fn spawn_card(
                 transform: Transform::from_xyz(0.0, title_y_pos, DELTA_Z),
                 ..default()
             });
+            // Hover overlay
+            parent
+                .spawn_bundle(SpriteBundle {
+                    texture: card_images.hover_overlay.clone(),
+                    sprite: Sprite {
+                        color: CARD_HOVER_OVERLAY_COLOR,
+                        ..default()
+                    },
+                    transform: Transform::from_xyz(0.0, 0.0, DELTA_Z * 1.5),
+                    visibility: Visibility { is_visible: false },
+                    ..default()
+                })
+                .insert(IsCardHoverOverlay);
         })
         .id();
 
@@ -331,23 +347,22 @@ pub fn card_mouse_pickup_system(
 pub fn card_hover_system(
     mut commands: Commands,
     maybe_mouse_world_pos: Res<MouseWorldPos>,
-    card_query: Query<(Entity, &GlobalTransform), With<Card>>,
+    card_query: Query<(Entity, &GlobalTransform, &Children), With<Card>>,
     dragged_card_query: Query<(Entity, &CardRelativeDragPosition), With<Card>>,
-    mut card_hover_overlay_query: Query<Entity, With<IsCardHoverOverlay>>,
+    mut card_hover_overlay_query: Query<&mut Visibility, With<IsCardHoverOverlay>>,
     card_visual_size: Res<CardVisualSize>,
-    card_images: Res<CardImages>,
 ) {
     if let Some(mouse_world_pos) = maybe_mouse_world_pos.0 {
         let mut hovered_card = None;
 
         if let Ok((dragged_card, relative_drag_pos)) = dragged_card_query.get_single() {
             // User is dragging a card. Then this is by definition the card they are hovering.
-            let (_, global_transform) = card_query.get(dragged_card).unwrap();
+            let (_, global_transform, _) = card_query.get(dragged_card).unwrap();
             hovered_card = Some((dragged_card, relative_drag_pos.0, global_transform));
         } else {
             // User isn't dragging a card. See which they are hovering.
 
-            for (entity, transform) in card_query.iter() {
+            for (entity, transform, _) in card_query.iter() {
                 if let Some(relative_pos) =
                     in_bounds(card_visual_size.0, transform, mouse_world_pos)
                 {
@@ -362,14 +377,23 @@ pub fn card_hover_system(
             }
         }
 
-        if let Some((hovered_entity, relative_pos, _)) = &hovered_card {
-            commands.entity(*hovered_entity).insert(HoveredCard {
-                relative_hover_pos: *relative_pos,
+        if let Some((hovered_entity, relative_pos, _)) = hovered_card {
+            commands.entity(hovered_entity).insert(HoveredCard {
+                relative_hover_pos: relative_pos,
             });
+
+            let children = card_query
+                .get_component::<Children>(hovered_entity)
+                .unwrap();
+            for &child in children.iter() {
+                if let Ok(mut visibility) = card_hover_overlay_query.get_mut(child) {
+                    visibility.is_visible = true;
+                }
+            }
         }
 
         // Clear all other hover markers, so there aren't any stray ones lying around.
-        for (entity, _) in card_query.iter() {
+        for (entity, _, children) in card_query.iter() {
             if let Some((hovered_entity, _, _)) = hovered_card {
                 if entity == hovered_entity {
                     continue;
@@ -377,6 +401,12 @@ pub fn card_hover_system(
             }
 
             commands.entity(entity).remove::<HoveredCard>();
+
+            for &child in children.iter() {
+                if let Ok(mut visibility) = card_hover_overlay_query.get_mut(child) {
+                    visibility.is_visible = false;
+                }
+            }
         }
     }
 }
