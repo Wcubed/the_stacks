@@ -10,10 +10,12 @@ pub struct RecipePlugin;
 
 impl Plugin for RecipePlugin {
     fn build(&self, app: &mut App) {
-        app.add_system_set(
+        app.add_event::<RecipeReadyMarker>().add_system_set(
             SystemSet::on_update(GameState::Run)
                 .with_system(recipe_check_system)
-                .with_system(recipe_cleanup_system),
+                .with_system(recipe_cleanup_system)
+                .with_system(recipe_timer_update_system)
+                .with_system(recipe_finished_exclusive_system.exclusive_system().at_end()),
         );
 
         let recipes = Recipes::default().with(Recipe {
@@ -30,14 +32,45 @@ impl Plugin for RecipePlugin {
     }
 }
 
+/// Component indicating the id of an ongoing recipe.
+#[derive(Component, Default, PartialEq, Eq, Hash, Clone, Copy)]
+pub struct RecipeId(usize);
+
+/// Component that marks a stack with a recipe ready to be finished.
+/// This is read by [recipe_finished_exclusive_system], which will finish the recipe.
+#[derive(Component)]
+pub struct RecipeReadyMarker(RecipeId);
+
+/// Resource listing all the possible recipes.
+#[derive(Default)]
+pub struct Recipes {
+    pub recipes: HashMap<RecipeId, Recipe>,
+    next_id: RecipeId,
+}
+
+impl Recipes {
+    pub fn with(mut self, new_recipe: Recipe) -> Self {
+        self.recipes.insert(self.next_id, new_recipe);
+        self.next_id.0 += 1;
+        self
+    }
+}
+
+pub struct Recipe {
+    name: String,
+    valid_callback: fn(&Vec<&Card>) -> bool,
+}
+
 /// Checks whether stacks are valid recipes or not.
 pub fn recipe_check_system(
     mut commands: Commands,
-    stacks: Query<(Entity, &CardsInStack, Option<&RecipeId>), Changed<CardsInStack>>,
+    stacks: Query<(&CardsInStack, Option<&RecipeId>), Changed<CardsInStack>>,
     cards: Query<&Card>,
     recipes: Res<Recipes>,
 ) {
-    for (root_card, stack, maybe_ongoing_recipe) in stacks.iter() {
+    for (stack, maybe_ongoing_recipe) in stacks.iter() {
+        let root_card = stack[0];
+
         let cards_in_stack = stack.iter().map(|&e| cards.get(e).unwrap()).collect();
 
         let mut recipe_found = false;
@@ -53,7 +86,6 @@ pub fn recipe_check_system(
         if !recipe_found {
             for (&id, recipe) in recipes.recipes.iter() {
                 if (recipe.valid_callback)(&cards_in_stack) {
-                    println!("{}", recipe.name);
                     commands.entity(root_card).insert(id);
 
                     // Stop at the first recipe found (best not to have overlapping recipes)
@@ -79,26 +111,41 @@ pub fn recipe_cleanup_system(
     }
 }
 
-/// Component indicating the id of an ongoing recipe.
-#[derive(Component, Default, PartialEq, Eq, Hash, Clone, Copy)]
-pub struct RecipeId(usize);
-
-/// Resource listing all the possible recipes.
-#[derive(Default)]
-pub struct Recipes {
-    pub recipes: HashMap<RecipeId, Recipe>,
-    next_id: RecipeId,
-}
-
-impl Recipes {
-    pub fn with(mut self, new_recipe: Recipe) -> Self {
-        self.recipes.insert(self.next_id, new_recipe);
-        self.next_id.0 += 1;
-        self
+pub fn recipe_timer_update_system(
+    mut commands: Commands,
+    ongoing_recipes: Query<(Entity, &RecipeId), With<CardsInStack>>,
+) {
+    // TODO (Wybe 2022-05-22): Add an actual timer.
+    for (root_card, &recipe_id) in ongoing_recipes.iter() {
+        commands
+            .entity(root_card)
+            .insert(RecipeReadyMarker(recipe_id))
+            .remove::<RecipeId>();
     }
 }
 
-pub struct Recipe {
-    name: String,
-    valid_callback: fn(&Vec<&Card>) -> bool,
+/// System that handles recipes that finish.
+/// Has full mutable access to the `World`, so there shouldn't be too many limits on what
+/// recipes can do when they complete.
+pub fn recipe_finished_exclusive_system(world: &mut World) {
+    let mut ready_recipes = world.query::<(&CardsInStack, &RecipeReadyMarker)>();
+    let recipes = world.get_resource::<Recipes>().unwrap();
+
+    let mut finished_recipe_roots = Vec::new();
+
+    for (stack, RecipeReadyMarker(id)) in ready_recipes.iter(world) {
+        if let Some(recipe) = recipes.recipes.get(&id) {
+            // TODO (Wybe 2022-05-22): Put a check in to see if the recipe is still valid?
+            println!("Recipe finished: {}", recipe.name);
+
+            finished_recipe_roots.push(stack[0])
+        }
+    }
+
+    for root_card in finished_recipe_roots {
+        world
+            .get_entity_mut(root_card)
+            .unwrap()
+            .remove::<RecipeReadyMarker>();
+    }
 }
