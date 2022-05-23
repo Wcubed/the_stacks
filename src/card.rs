@@ -109,7 +109,7 @@ impl CardCreation {
         }
     }
 
-    pub fn spawn_card(&self, commands: &mut Commands, card: Card) {
+    pub fn spawn_card(&self, commands: &mut Commands, card: Card, position: Vec2) {
         let id = commands
             .spawn_bundle(SpriteBundle {
                 texture: self.background.clone(),
@@ -117,6 +117,7 @@ impl CardCreation {
                     color: card.card_type.background_color(),
                     ..default()
                 },
+                transform: Transform::from_xyz(position.x, position.y, 0.),
                 ..default()
             })
             .insert(card.clone())
@@ -235,11 +236,11 @@ pub fn on_assets_loaded(
 
 pub fn spawn_test_cards(mut commands: Commands, creation: Res<CardCreation>) {
     for _ in 0..5 {
-        creation.spawn_card(&mut commands, card_types::WORKER);
+        creation.spawn_card(&mut commands, card_types::WORKER, Vec2::ZERO);
     }
 
     for _ in 0..5 {
-        creation.spawn_card(&mut commands, card_types::TREE);
+        creation.spawn_card(&mut commands, card_types::TREE, Vec2::ZERO);
     }
 }
 

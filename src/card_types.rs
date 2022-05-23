@@ -23,6 +23,11 @@ pub(crate) const TREE: Card = Card {
     card_type: CardType::Nature,
 };
 
+pub(crate) const LOG: Card = Card {
+    title: "Log",
+    card_type: CardType::Resource,
+};
+
 pub(crate) const WORKER: Card = Card {
     title: "Worker",
     card_type: CardType::Worker,

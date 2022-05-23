@@ -1,8 +1,10 @@
-use crate::card::{Card, CardsInStack, IsBottomCardOfStack};
+use crate::card::{Card, CardCreation, CardsInStack, IsBottomCardOfStack};
 use crate::card_types::CardType::Worker;
+use crate::card_types::LOG;
 use crate::{card_types, GameState};
+use bevy::ecs::schedule::{IntoSystemDescriptor, SystemDescriptor};
 use bevy::prelude::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// Handles recipes on card stacks
 /// Requires [CardPlugin].
@@ -18,15 +20,32 @@ impl Plugin for RecipePlugin {
                 .with_system(recipe_finished_exclusive_system.exclusive_system().at_end()),
         );
 
-        let recipes = Recipes::default().with(Recipe {
-            name: "Cutting tree".to_owned(),
-            valid_callback: |cards| {
-                // Exactly 1 of type Worker, and the rest trees.
-                cards.iter().any(|c| c.card_type == Worker)
-                    && cards.iter().filter(|c| c == &&&card_types::TREE).count() == cards.len() - 1
-                    && cards.len() > 1
-            },
-        });
+        let world = &mut app.world;
+
+        let recipes = RecipesBuilder::new(world)
+            .with(
+                "Cutting tree",
+                |cards| {
+                    // Exactly 1 of type Worker, and the rest trees.
+                    cards.iter().any(|c| c.card_type == Worker)
+                        && cards.iter().filter(|c| c == &&&card_types::TREE).count()
+                            == cards.len() - 1
+                        && cards.len() > 1
+                },
+                |mut commands: Commands,
+                 recipe_stack_query: Query<(&RecipeReadyMarker, &GlobalTransform)>,
+                 creation: Res<CardCreation>| {
+                    // TODO (Wybe 2022-05-23): Implement removing card from stack.
+                    for (_, global_transform) in recipe_stack_query.iter() {
+                        creation.spawn_card(
+                            &mut commands,
+                            LOG,
+                            global_transform.translation.truncate(),
+                        );
+                    }
+                },
+            )
+            .build();
 
         app.insert_resource(recipes);
     }
@@ -34,31 +53,68 @@ impl Plugin for RecipePlugin {
 
 /// Component indicating the id of an ongoing recipe.
 #[derive(Component, Default, PartialEq, Eq, Hash, Clone, Copy)]
-pub struct RecipeId(usize);
+pub struct RecipeId(&'static str);
 
 /// Component that marks a stack with a recipe ready to be finished.
 /// This is read by [recipe_finished_exclusive_system], which will finish the recipe.
 #[derive(Component)]
 pub struct RecipeReadyMarker(RecipeId);
 
-/// Resource listing all the possible recipes.
-#[derive(Default)]
-pub struct Recipes {
-    pub recipes: HashMap<RecipeId, Recipe>,
-    next_id: RecipeId,
+pub struct RecipesBuilder<'a> {
+    world: &'a mut World,
+    recipes: HashMap<RecipeId, Recipe>,
 }
 
-impl Recipes {
-    pub fn with(mut self, new_recipe: Recipe) -> Self {
-        self.recipes.insert(self.next_id, new_recipe);
-        self.next_id.0 += 1;
+impl<'a> RecipesBuilder<'a> {
+    fn new(world: &'a mut bevy::prelude::World) -> Self {
+        RecipesBuilder {
+            world,
+            recipes: HashMap::new(),
+        }
+    }
+
+    pub fn with<Params>(
+        mut self,
+        name: &'static str,
+        valid_callback: fn(&Vec<&Card>) -> bool,
+        finished_system: impl IntoSystem<(), (), Params> + 'static,
+    ) -> Self {
+        let mut boxed_system = Box::new(IntoSystem::into_system(finished_system));
+        boxed_system.initialize(&mut self.world);
+
+        let id = RecipeId(name);
+
+        let new_recipe = Recipe {
+            id,
+            valid_callback,
+            finished_system: boxed_system,
+        };
+
+        self.recipes.insert(id, new_recipe);
         self
+    }
+
+    pub fn build(mut self) -> Recipes {
+        Recipes(self.recipes)
     }
 }
 
+/// Resource listing all the possible recipes.
+#[derive(Default, Deref, DerefMut)]
+pub struct Recipes(HashMap<RecipeId, Recipe>);
+
 pub struct Recipe {
-    name: String,
+    id: RecipeId,
+    /// This callback is called when cards are added or removed from stacks.
+    /// Should return `true` if the given stack contents are valid for this recipe.
     valid_callback: fn(&Vec<&Card>) -> bool,
+    /// Each `finished_system` is only called a maximum of once per frame.
+    /// The stacks that need to be handled will be indicated by a [RecipeReadyMarker] with the id
+    /// of the recipe.
+    /// If there are multiple stacks ready with this recipe, they need to be handled all at once.
+    ///
+    /// Do not worry about leaving a [RecipeReadyMarker] lying around. It will be cleaned up automatically.
+    finished_system: Box<dyn System<In = (), Out = ()>>,
 }
 
 /// Checks whether stacks are valid recipes or not.
@@ -76,7 +132,7 @@ pub fn recipe_check_system(
         let mut recipe_found = false;
 
         if let Some(ongoing_recipe_id) = maybe_ongoing_recipe {
-            if let Some(ongoing_recipe) = recipes.recipes.get(ongoing_recipe_id) {
+            if let Some(ongoing_recipe) = recipes.get(ongoing_recipe_id) {
                 if (ongoing_recipe.valid_callback)(&cards_in_stack) {
                     recipe_found = true;
                 }
@@ -84,7 +140,7 @@ pub fn recipe_check_system(
         }
 
         if !recipe_found {
-            for (&id, recipe) in recipes.recipes.iter() {
+            for (&id, recipe) in recipes.iter() {
                 if (recipe.valid_callback)(&cards_in_stack) {
                     commands.entity(root_card).insert(id);
 
@@ -129,23 +185,29 @@ pub fn recipe_timer_update_system(
 /// recipes can do when they complete.
 pub fn recipe_finished_exclusive_system(world: &mut World) {
     let mut ready_recipes = world.query::<(&CardsInStack, &RecipeReadyMarker)>();
-    let recipes = world.get_resource::<Recipes>().unwrap();
 
     let mut finished_recipe_roots = Vec::new();
+    let mut finished_recipes = HashSet::new();
 
     for (stack, RecipeReadyMarker(id)) in ready_recipes.iter(world) {
-        if let Some(recipe) = recipes.recipes.get(&id) {
-            // TODO (Wybe 2022-05-22): Put a check in to see if the recipe is still valid?
-            println!("Recipe finished: {}", recipe.name);
-
-            finished_recipe_roots.push(stack[0])
-        }
+        finished_recipe_roots.push(stack[0]);
+        finished_recipes.insert(*id);
     }
+
+    world.resource_scope(|world, mut recipes: Mut<Recipes>| {
+        for id in finished_recipes {
+            if let Some(recipe) = recipes.get_mut(&id) {
+                // TODO (Wybe 2022-05-22): Put a check in to see if the recipe is still valid?
+                recipe.finished_system.run((), world);
+                // Apply any generated commands.
+                recipe.finished_system.apply_buffers(world);
+            }
+        }
+    });
 
     for root_card in finished_recipe_roots {
         world
             .get_entity_mut(root_card)
-            .unwrap()
-            .remove::<RecipeReadyMarker>();
+            .and_then(|mut e| e.remove::<RecipeReadyMarker>());
     }
 }
