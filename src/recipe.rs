@@ -1,6 +1,6 @@
 use crate::card::{Card, CardCreation, CardsInStack, IsBottomCardOfStack};
 use crate::card_types::CardType::Worker;
-use crate::card_types::LOG;
+use crate::card_types::{LOG, PLANK};
 use crate::{card_types, GameState};
 use bevy::ecs::schedule::{IntoSystemDescriptor, SystemDescriptor};
 use bevy::prelude::*;
@@ -36,10 +36,30 @@ impl Plugin for RecipePlugin {
                  recipe_stack_query: Query<(&RecipeReadyMarker, &GlobalTransform)>,
                  creation: Res<CardCreation>| {
                     // TODO (Wybe 2022-05-23): Implement removing card from stack.
+                    // TODO (Wybe 2022-05-23): Make a stack a separate entity, with the first card as a child. That way, any components that apply to the full stack, stay when you remove something from a stack.
                     for (_, global_transform) in recipe_stack_query.iter() {
                         creation.spawn_card(
                             &mut commands,
                             LOG,
+                            global_transform.translation.truncate(),
+                        );
+                    }
+                },
+            )
+            .with(
+                "Making plank",
+                |cards| {
+                    cards.len() == 2
+                        && cards.contains(&&LOG)
+                        && cards.iter().any(|c| c.card_type == Worker)
+                },
+                |mut commands: Commands,
+                 recipe_stack_query: Query<(&RecipeReadyMarker, &GlobalTransform)>,
+                 creation: Res<CardCreation>| {
+                    for (_, global_transform) in recipe_stack_query.iter() {
+                        creation.spawn_card(
+                            &mut commands,
+                            PLANK,
                             global_transform.translation.truncate(),
                         );
                     }

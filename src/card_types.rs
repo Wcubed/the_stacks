@@ -28,6 +28,11 @@ pub(crate) const LOG: Card = Card {
     card_type: CardType::Resource,
 };
 
+pub(crate) const PLANK: Card = Card {
+    title: "Plank",
+    card_type: CardType::Resource,
+};
+
 pub(crate) const WORKER: Card = Card {
     title: "Worker",
     card_type: CardType::Worker,
