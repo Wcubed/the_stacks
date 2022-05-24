@@ -6,6 +6,7 @@ pub enum CardType {
     Worker,
     Nature,
     Resource,
+    Food,
 }
 
 impl CardType {
@@ -14,6 +15,7 @@ impl CardType {
             CardType::Worker => Color::hsl(25., 0.8, 0.2),
             CardType::Nature => Color::DARK_GREEN,
             CardType::Resource => Color::BLUE,
+            CardType::Food => Color::OLIVE,
         }
     }
 }
@@ -26,6 +28,11 @@ pub(crate) const TREE: Card = Card {
 pub(crate) const LOG: Card = Card {
     title: "Log",
     card_type: CardType::Resource,
+};
+
+pub(crate) const APPLE: Card = Card {
+    title: "Apple",
+    card_type: CardType::Food,
 };
 
 pub(crate) const PLANK: Card = Card {

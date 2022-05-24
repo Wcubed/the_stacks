@@ -1,6 +1,6 @@
 use crate::card::{Card, CardStack};
 use crate::card_types::CardType::Worker;
-use crate::card_types::{LOG, PLANK};
+use crate::card_types::{APPLE, LOG, PLANK};
 use crate::stack_utils::{delete_card, StackCreation};
 use crate::{card_types, GameState};
 use bevy::prelude::*;
@@ -43,6 +43,11 @@ impl Plugin for RecipePlugin {
                             &mut commands,
                             global_transform.translation.truncate(),
                             &[LOG, LOG],
+                        );
+                        creation.spawn_stack(
+                            &mut commands,
+                            global_transform.translation.truncate(),
+                            &[APPLE],
                         );
 
                         for &card_entity in stack.iter() {
