@@ -1,4 +1,4 @@
-use crate::card::CardRelativeDragPosition;
+use crate::card::StackRelativeDragPosition;
 use crate::GameState;
 use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 use bevy::prelude::*;
@@ -53,7 +53,7 @@ pub fn camera_drag_system(
     windows: Res<Windows>,
     mouse_button: Res<Input<MouseButton>>,
     mut last_pos: Local<Option<Vec2>>,
-    dragged_card_query: Query<&CardRelativeDragPosition>,
+    dragged_card_query: Query<&StackRelativeDragPosition>,
 ) {
     if !dragged_card_query.is_empty() {
         // The user is dragging cards, so we shouldn't be dragging the camera, otherwise that
@@ -68,8 +68,6 @@ pub fn camera_drag_system(
     let delta = current_pos - last_pos.unwrap_or(current_pos);
 
     if mouse_button.pressed(MouseButton::Left) || mouse_button.pressed(MouseButton::Right) {
-        let window_size = Vec2::new(window.width(), window.height());
-
         let (mut camera_transform, projection) = camera_query.single_mut();
 
         let scaling = Vec2::new(

@@ -36,7 +36,7 @@ impl Plugin for CardPlugin {
             .with_collection::<CardFonts>()
             .build(app);
 
-        app.add_event::<CardDroppedEvent>()
+        app.add_event::<StackDroppedEvent>()
             .add_event::<CardPickedUpEvent>()
             .insert_resource(MouseWorldPos(None))
             .add_system_to_stage(CoreStage::PreUpdate, mouse_world_pos_update_system)
@@ -46,13 +46,13 @@ impl Plugin for CardPlugin {
             .add_system_set(SystemSet::on_enter(GameState::Run).with_system(spawn_test_cards))
             .add_system_set(
                 SystemSet::on_update(GameState::Run)
-                    .with_system(card_mouse_drag_system)
+                    .with_system(stack_mouse_drag_system)
                     .with_system(card_mouse_pickup_system)
-                    .with_system(card_mouse_drop_system)
+                    .with_system(stack_mouse_drop_system)
                     .with_system(card_hover_system)
-                    .with_system(card_cursor_system)
+                    .with_system(hover_drag_cursor_system)
                     .with_system(stack_overlap_nudging_system)
-                    .with_system(card_stacking_system),
+                    .with_system(dropped_stack_merging_system),
             );
     }
 }
@@ -110,19 +110,16 @@ impl CardCreation {
     }
 
     pub fn spawn_card(&self, commands: &mut Commands, card: Card, position: Vec2) {
-        let id = commands
+        let card_id = commands
             .spawn_bundle(SpriteBundle {
                 texture: self.background.clone(),
                 sprite: Sprite {
                     color: card.card_type.background_color(),
                     ..default()
                 },
-                transform: Transform::from_xyz(position.x, position.y, 0.),
                 ..default()
             })
             .insert(card.clone())
-            .insert(IsBottomCardOfStack)
-            .insert(CardPhysics)
             .with_children(|parent| {
                 // Border
                 parent.spawn_bundle(SpriteBundle {
@@ -144,7 +141,7 @@ impl CardCreation {
                             horizontal: HorizontalAlign::Center,
                         },
                     ),
-                    transform: self.title_transform.clone(),
+                    transform: self.title_transform,
                     ..default()
                 });
                 // Hover overlay
@@ -163,11 +160,14 @@ impl CardCreation {
             })
             .id();
 
-        // Add the components that rely on knowing the entity id.
+        // Add the stack's root.
         commands
-            .entity(id)
-            .insert(RootCardOfThisStack(id))
-            .insert(CardsInStack(vec![id]));
+            .spawn_bundle(TransformBundle::from_transform(Transform::from_xyz(
+                position.x, position.y, 0.,
+            )))
+            .insert(StackPhysics)
+            .insert(CardStack(vec![card_id]))
+            .add_child(card_id);
     }
 }
 
@@ -177,33 +177,24 @@ pub struct Card {
     pub(crate) card_type: CardType,
 }
 
+/// Marks stacks which should have physics applied.
+#[derive(Component)]
+pub struct StackPhysics;
+
+/// Indicates this is the root entity of a stack of cards.
+/// Contains all cards, in-order.
+/// Each individual card is a stack with a single card.
+/// Stacked cards are all direct children of the Stack entity.
+/// TODO (Wybe 2022-05-15): Write extensive tests for stacking and un-stacking.
+#[derive(Component, Deref, Debug)]
+pub struct CardStack(Vec<Entity>);
+
 /// Marks an entity that shows a card is being hovered.
 #[derive(Component)]
 pub struct IsCardHoverOverlay;
 
-/// Marks cards which should have physics applied.
-#[derive(Component)]
-pub struct CardPhysics;
-
-/// Indicates this is the topmost (root) card of a stack of cards.
-/// All individual cards are root cards.
-/// Contains the list of cards in the stack, starting from the root.
-/// TODO (Wybe 2022-05-15): Write extensive tests for stacking and un-stacking.
-#[derive(Component, Deref, Debug)]
-pub struct CardsInStack(Vec<Entity>);
-
-/// Indicates this is the bottom card in a stack,
-/// which means it can have more cards dropped on top of it.
-#[derive(Component)]
-pub struct IsBottomCardOfStack;
-
-/// Points to the root card of a stack.
-/// When this card is the root, this points to itself.
-#[derive(Component)]
-pub struct RootCardOfThisStack(Entity);
-
 #[derive(Component, Deref, DerefMut)]
-pub struct CardRelativeDragPosition(Vec2);
+pub struct StackRelativeDragPosition(Vec2);
 
 /// Indicates a card is being hovered with the mouse.
 #[derive(Component)]
@@ -212,7 +203,7 @@ pub struct HoveredCard {
 }
 
 /// Event sent by the [card_mouse_drag_system] when the user drops a card.
-pub struct CardDroppedEvent(Entity, GlobalTransform);
+pub struct StackDroppedEvent(Entity, GlobalTransform);
 
 /// Event sent by the [card_mouse_drag_system] when the user picks up a card.
 pub struct CardPickedUpEvent(Entity);
@@ -267,38 +258,41 @@ pub fn mouse_world_pos_update_system(
     }
 }
 
-pub fn card_mouse_drop_system(
+pub fn stack_mouse_drop_system(
     mut commands: Commands,
     mouse_button: Res<Input<MouseButton>>,
-    mut dragged_card_query: Query<
+    mut dragged_stack_query: Query<
         (Entity, &mut Transform, &GlobalTransform),
-        (With<Card>, With<CardRelativeDragPosition>),
+        With<StackRelativeDragPosition>,
     >,
-    mut card_dropped_writer: EventWriter<CardDroppedEvent>,
+    mut stack_dropped_writer: EventWriter<StackDroppedEvent>,
 ) {
     if mouse_button.just_released(MouseButton::Left) {
-        for (card, mut transform, global_transform) in dragged_card_query.iter_mut() {
-            commands.entity(card).remove::<CardRelativeDragPosition>();
+        for (root, mut transform, global_transform) in dragged_stack_query.iter_mut() {
+            commands.entity(root).remove::<StackRelativeDragPosition>();
             transform.translation.z = CARD_Z;
             transform.scale = Vec3::ONE;
 
-            card_dropped_writer.send(CardDroppedEvent(card, *global_transform));
+            stack_dropped_writer.send(StackDroppedEvent(root, *global_transform));
         }
     }
 }
 
-pub fn card_mouse_drag_system(
+pub fn stack_mouse_drag_system(
     maybe_mouse_world_pos: Res<MouseWorldPos>,
-    mut dragged_card_query: Query<(Entity, &mut Transform, &CardRelativeDragPosition), With<Card>>,
-    mut card_dropped_reader: EventReader<CardDroppedEvent>,
+    mut dragged_stack_query: Query<
+        (Entity, &mut Transform, &StackRelativeDragPosition),
+        With<CardStack>,
+    >,
+    mut stack_dropped_reader: EventReader<StackDroppedEvent>,
 ) {
     if let Some(mouse_world_pos) = maybe_mouse_world_pos.0 {
-        let dropped_cards: HashSet<Entity> =
-            card_dropped_reader.iter().map(|entry| entry.0).collect();
+        let dropped_stacks: HashSet<Entity> =
+            stack_dropped_reader.iter().map(|entry| entry.0).collect();
 
-        for (card, mut transform, drag_position) in dragged_card_query.iter_mut() {
-            if dropped_cards.contains(&card) {
-                // Shouldn't drag a card around that has just gotten dropped.
+        for (stack, mut transform, drag_position) in dragged_stack_query.iter_mut() {
+            if dropped_stacks.contains(&stack) {
+                // Shouldn't drag a stack around that has just gotten dropped.
                 continue;
             }
 
@@ -309,38 +303,45 @@ pub fn card_mouse_drag_system(
 }
 
 /// Relies on the [card_hover_system] to supply info on which card is being hovered.
+/// If the card is the bottom most card of a stack, picks up the whole stack.
+/// If it is in the middle of a stack, the stack will be split.
 pub fn card_mouse_pickup_system(
     mut commands: Commands,
     mouse_button: Res<Input<MouseButton>>,
-    hovered_but_not_dragged_card_query: Query<
-        (Entity, &HoveredCard),
-        (With<Card>, Without<CardRelativeDragPosition>),
-    >,
-    root_card_transforms: Query<(&RootCardOfThisStack, &GlobalTransform), With<Card>>,
-    stacks: Query<&CardsInStack, With<Card>>,
+    hovered_card_query: Query<(Entity, &Parent, &HoveredCard, &GlobalTransform), With<Card>>,
+    stacks: Query<&CardStack>,
 ) {
     if mouse_button.just_pressed(MouseButton::Left) {
-        for (picked_up_card, hovered_card) in hovered_but_not_dragged_card_query.iter() {
-            commands
-                .entity(picked_up_card)
-                .insert(CardRelativeDragPosition(hovered_card.relative_hover_pos))
-                .remove::<CardPhysics>();
-
-            if let Ok((RootCardOfThisStack(root_card), picked_up_global_transform)) =
-                root_card_transforms.get(picked_up_card)
-            {
-                if *root_card == picked_up_card {
-                    // No need to split a stack at the root card.
-                    continue;
-                }
-
-                if let Ok(CardsInStack(stack)) = stacks.get(*root_card) {
-                    split_stack(
+        for (card_entity, stack_root, hovered_card_component, global_transform) in
+            hovered_card_query.iter()
+        {
+            if let Ok(stack) = stacks.get(stack_root.0) {
+                if stack[0] == card_entity {
+                    // Picking up the whole stack
+                    commands
+                        .entity(stack_root.0)
+                        .insert(StackRelativeDragPosition(
+                            hovered_card_component.relative_hover_pos,
+                        ))
+                        .remove::<StackPhysics>();
+                } else {
+                    // Picking up some other card in the stack, which means splitting it.
+                    let new_root = split_stack(
                         &mut commands,
-                        stack,
-                        picked_up_card,
-                        picked_up_global_transform,
+                        stack_root.0,
+                        &stack.0,
+                        card_entity,
+                        global_transform,
                     );
+
+                    if let Some(root) = new_root {
+                        commands
+                            .entity(root)
+                            .insert(StackRelativeDragPosition(
+                                hovered_card_component.relative_hover_pos,
+                            ))
+                            .remove::<StackPhysics>();
+                    }
                 }
             }
         }
@@ -351,19 +352,19 @@ pub fn card_hover_system(
     mut commands: Commands,
     maybe_mouse_world_pos: Res<MouseWorldPos>,
     card_query: Query<(Entity, &GlobalTransform, &Children), With<Card>>,
-    dragged_card_query: Query<(Entity, &CardRelativeDragPosition), With<Card>>,
+    stack_dragged_query: Query<(&StackRelativeDragPosition, &CardStack)>,
     mut card_hover_overlay_query: Query<&mut Visibility, With<IsCardHoverOverlay>>,
     card_visual_size: Res<CardVisualSize>,
 ) {
     if let Some(mouse_world_pos) = maybe_mouse_world_pos.0 {
         let mut hovered_card = None;
 
-        if let Ok((dragged_card, relative_drag_pos)) = dragged_card_query.get_single() {
-            // User is dragging a card. Then this is by definition the card they are hovering.
-            let (_, global_transform, _) = card_query.get(dragged_card).unwrap();
-            hovered_card = Some((dragged_card, relative_drag_pos.0, global_transform));
+        if let Ok((relative_drag_pos, cards_in_stack)) = stack_dragged_query.get_single() {
+            // User is dragging a stack. The root is the card they are hovering.
+            let (_, global_transform, _) = card_query.get(cards_in_stack[0]).unwrap();
+            hovered_card = Some((cards_in_stack[0], relative_drag_pos.0, global_transform));
         } else {
-            // User isn't dragging a card. See which they are hovering.
+            // User isn't dragging a stack. See which card they are hovering.
 
             for (entity, transform, _) in card_query.iter() {
                 if let Some(relative_pos) =
@@ -420,14 +421,14 @@ pub fn card_hover_system(
     }
 }
 
-pub fn card_cursor_system(
+pub fn hover_drag_cursor_system(
     mut windows: ResMut<Windows>,
     hovered_card_query: Query<Entity, With<HoveredCard>>,
-    dragged_card_query: Query<Entity, With<CardRelativeDragPosition>>,
+    dragged_stack_query: Query<Entity, With<StackRelativeDragPosition>>,
 ) {
     let primary_window = windows.get_primary_mut().expect("No primary window!");
 
-    if !dragged_card_query.is_empty() {
+    if !dragged_stack_query.is_empty() {
         primary_window.set_cursor_icon(CursorIcon::Grabbing);
     } else if !hovered_card_query.is_empty() {
         primary_window.set_cursor_icon(CursorIcon::Grab);
@@ -436,146 +437,153 @@ pub fn card_cursor_system(
     }
 }
 
-pub fn card_stacking_system(
+pub fn dropped_stack_merging_system(
     mut commands: Commands,
-    targetable_card_query: Query<
-        (Entity, &GlobalTransform, &RootCardOfThisStack),
-        (With<Card>, With<IsBottomCardOfStack>),
-    >,
-    stacks: Query<&CardsInStack, With<Card>>,
+    stack_query: Query<(Entity, &GlobalTransform, &CardStack)>,
     card_visual_size: Res<CardVisualSize>,
-    mut card_dropped_reader: EventReader<CardDroppedEvent>,
+    mut stack_dropped_reader: EventReader<StackDroppedEvent>,
 ) {
-    for CardDroppedEvent(dropped_entity, dropped_global_transform) in card_dropped_reader.iter() {
-        let mut closest_drop_target = None;
+    for StackDroppedEvent(dropped_stack_root, dropped_global_transform) in
+        stack_dropped_reader.iter()
+    {
+        let mut stack_merged = false;
 
         // Find which card we are overlapping the most.
         // TODO (Wybe 2022-05-14): This should also check if the card we are overlapping is
         //   a valid target to stack with.
-        for (entity, global_transform, root_card_of_stack) in targetable_card_query.iter() {
-            if entity == *dropped_entity {
+        for (stack_root, stack_global_transform, target_stack) in stack_query.iter() {
+            if stack_root == *dropped_stack_root {
                 // Cannot drop onto self.
                 continue;
             }
-            if root_card_of_stack.0 == *dropped_entity {
-                // Should not drop onto the bottom card of our own stack.
-                continue;
-            }
 
-            if let Some(distance) = get_movement_to_no_longer_overlap(
-                global_transform.translation.truncate(),
+            let center_of_top_card = center_of_top_card(stack_global_transform, target_stack.len());
+
+            // TODO (Wybe 2022-05-24): Also take into account rotating and scaling.
+            if in_bounds(
                 card_visual_size.0,
+                &center_of_top_card,
                 dropped_global_transform.translation.truncate(),
-                card_visual_size.0,
             )
-            .map(|v| v.length())
+            .is_some()
             {
-                if let Some((longest_overlap_movement, _)) = closest_drop_target {
-                    if distance > longest_overlap_movement {
-                        closest_drop_target = Some((distance, root_card_of_stack.0));
-                    }
-                } else {
-                    closest_drop_target = Some((distance, root_card_of_stack.0));
-                }
+                let (_, _, dropped_stack) = stack_query.get(*dropped_stack_root).unwrap();
+                merge_stacks(
+                    &mut commands,
+                    *dropped_stack_root,
+                    dropped_stack,
+                    stack_root,
+                    target_stack,
+                );
+                // Stack has been merged, no need to check other stacks.
+                stack_merged = true;
+                break;
             }
         }
 
-        // If we have a target. We need to add this card on top of it.
-        if let Some((_, root_card_of_stack)) = closest_drop_target {
-            if let (Ok(source_stack), Ok(target_stack)) =
-                (stacks.get(*dropped_entity), stacks.get(root_card_of_stack))
-            {
-                add_card_to_stack(&mut commands, &source_stack.0, &target_stack.0);
-            }
-        } else {
-            // Re-enable physics for the card.
-            commands.entity(*dropped_entity).insert(CardPhysics);
+        if !stack_merged {
+            // Re-enable physics for the dropped stack.
+            commands.entity(*dropped_stack_root).insert(StackPhysics);
         }
     }
 }
 
-/// Adds the cards of the `source_stack` to the bottom of the `target_stack`.
+fn center_of_top_card(root_transform: &GlobalTransform, amount_of_cards: usize) -> GlobalTransform {
+    GlobalTransform::from_translation(
+        root_transform.translation
+            + root_transform.down()
+                * root_transform.scale
+                * CARD_STACK_Y_SPACING
+                * amount_of_cards as f32,
+    )
+}
+
+/// Adds the cards of the `source_stack` to the top of the `target_stack`.
 /// Assumes no duplicate cards.
 ///
 /// Effects are applied via `Commands`, which means it is visible next update.
-pub fn add_card_to_stack(
+pub fn merge_stacks(
     commands: &mut Commands,
+    source_root: Entity,
     source_stack: &[Entity],
+    target_root: Entity,
     target_stack: &[Entity],
 ) {
     if source_stack.is_empty() || target_stack.is_empty() {
         return;
     }
 
-    let &root_card_of_source_stack = source_stack.first().unwrap();
-    let &root_card_of_target_stack = target_stack.first().unwrap();
-    let &bottom_card_of_target_stack = target_stack.last().unwrap();
+    let mut combined_stack = target_stack.to_owned();
+    combined_stack.extend(source_stack);
 
-    // Put this card in front of the parent.
-    let new_transform = Transform::from_xyz(0., -CARD_STACK_Y_SPACING, DELTA_Z * 2.);
+    set_stack_card_transforms(commands, &combined_stack);
+
+    commands.entity(source_root).despawn();
 
     commands
-        .entity(bottom_card_of_target_stack)
-        .add_child(root_card_of_source_stack)
-        .remove::<IsBottomCardOfStack>();
-    commands
-        .entity(root_card_of_source_stack)
-        .remove::<CardsInStack>()
-        .insert(new_transform);
-
-    for &card in source_stack {
-        commands
-            .entity(card)
-            .insert(RootCardOfThisStack(root_card_of_target_stack));
-    }
-
-    let mut cards_in_new_stack = target_stack.to_owned();
-    cards_in_new_stack.extend(source_stack);
-    commands
-        .entity(root_card_of_target_stack)
-        .insert(CardsInStack(cards_in_new_stack));
+        .entity(target_root)
+        .insert(CardStack(combined_stack))
+        .insert_children(0, source_stack);
 }
 
 /// Splits a stack so that the `new_root` card is the root of a new stack.
 /// Effects are applied via `Commands`, which means it is visible next update.
+///
+/// Returns the Entity id of the newly created stack root, if the stack needed to be split.
 pub fn split_stack(
     commands: &mut Commands,
+    stack_root: Entity,
     stack: &[Entity],
-    new_root: Entity,
-    new_root_global_transform: &GlobalTransform,
-) {
+    new_bottom_card: Entity,
+    new_bottom_card_global_transform: &GlobalTransform,
+) -> Option<Entity> {
     if stack.is_empty() {
-        return;
+        return None;
     }
-    if let Some(new_root_index) = stack.iter().position(|&e| e == new_root) {
+    if let Some(new_root_index) = stack.iter().position(|&e| e == new_bottom_card) {
         if new_root_index == 0 {
             // Picking up the root of a stack. No need to split.
-            return;
+            return None;
         }
-
-        let &new_bottom_card = stack.get(new_root_index - 1).unwrap();
-        commands
-            .entity(new_bottom_card)
-            .remove_children(&[new_root])
-            .insert(IsBottomCardOfStack);
 
         let bottom_stack = &stack[0..new_root_index];
         let top_stack = &stack[new_root_index..stack.len()];
 
-        let &bottom_root = stack.first().unwrap();
+        // Update the old (now bottom) stack root.
         commands
-            .entity(bottom_root)
-            .insert(CardsInStack(bottom_stack.to_vec()));
+            .entity(stack_root)
+            .insert(CardStack(Vec::from(bottom_stack)))
+            .remove_children(top_stack);
 
-        let new_root_transform = Transform::from(*new_root_global_transform);
-        commands
-            .entity(new_root)
-            .insert(CardsInStack(top_stack.to_vec()))
-            .insert(new_root_transform);
+        // Create the new top stack root.
+        let new_root_id = commands
+            .spawn_bundle(TransformBundle::from_transform(Transform::from(
+                *new_bottom_card_global_transform,
+            )))
+            .insert_children(0, top_stack)
+            .insert(CardStack(Vec::from(top_stack)))
+            .insert(StackPhysics)
+            .id();
 
-        for &card in top_stack {
-            commands.entity(card).insert(RootCardOfThisStack(new_root));
-        }
+        set_stack_card_transforms(commands, top_stack);
+
+        Some(new_root_id)
+    } else {
+        None
+    }
+}
+
+/// When given a stack of cards, this function stacks them all nicely.
+/// Applies via commands, so effects are only visible next frame.
+fn set_stack_card_transforms(commands: &mut Commands, stack: &[Entity]) {
+    for (i, &card) in stack.iter().enumerate() {
+        commands.entity(card).insert(Transform::from_xyz(
+            0.,
+            -CARD_STACK_Y_SPACING * i as f32,
+            // Leave Z spacing for card overlays and such.
+            // TODO (Wybe 2022-05-24): Is there a better way than just arbitrarily keeping a certain space?
+            DELTA_Z * i as f32 * 2.,
+        ));
     }
 }
 
@@ -583,17 +591,15 @@ pub fn split_stack(
 /// TODO (Wybe 2022-05-21): This currently nudges cards that were just dropped, but not yet added to a stack.
 ///      It would probably be better to add dropped cards to a stack right away. And to remove picked up cards from a stack right away,
 ///      instead of next frame.
+/// TODO (Wybe 2022-05-24): Take into account scaling and rotation?
 pub fn stack_overlap_nudging_system(
     time: Res<Time>,
-    mut physics_stacks: Query<
-        (&GlobalTransform, &mut Transform, &CardsInStack),
-        (With<Card>, With<CardPhysics>),
-    >,
+    mut physics_stacks: Query<(&GlobalTransform, &mut Transform, &CardStack), With<StackPhysics>>,
     card_visual_size: Res<CardVisualSize>,
 ) {
     let mut combinations = physics_stacks.iter_combinations_mut();
     while let Some(
-        [(global_transform1, mut transform1, CardsInStack(cards_in_stack1)), (global_transform2, mut transform2, CardsInStack(cards_in_stack2))],
+        [(global_transform1, mut transform1, CardStack(cards_in_stack1)), (global_transform2, mut transform2, CardStack(cards_in_stack2))],
     ) = combinations.fetch_next()
     {
         let stack1_wanted_space =
@@ -651,9 +657,13 @@ fn window_pos_to_world_pos(
 /// Returns where in the bounds the position is located.
 /// `None` if the position is not in bounds.
 /// Assumes the `size`'s origin is at it's center.
-fn in_bounds(size: Vec2, transform: &GlobalTransform, position_to_check: Vec2) -> Option<Vec2> {
+fn in_bounds(
+    unscaled_size: Vec2,
+    transform: &GlobalTransform,
+    position_to_check: Vec2,
+) -> Option<Vec2> {
     // TODO (Wybe 2022-05-14): Take into account rotation.
-    let half_size = size * transform.scale.truncate() / 2.0;
+    let half_size = unscaled_size * transform.scale.truncate() / 2.0;
 
     let pos_in_bounds = position_to_check - transform.translation.truncate();
 
