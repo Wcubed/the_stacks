@@ -81,7 +81,7 @@ pub struct MouseWorldPos(Option<Vec2>);
 pub struct CardVisualSize(Vec2);
 
 /// Resource that contains everything needed to create new cards.
-pub struct CardCreation {
+pub struct StackCreation {
     background: Handle<Image>,
     border: Handle<Image>,
     hover_overlay: Handle<Image>,
@@ -89,9 +89,9 @@ pub struct CardCreation {
     title_transform: Transform,
 }
 
-impl CardCreation {
+impl StackCreation {
     pub fn new(images: &CardImages, fonts: &CardFonts, visual_size: Vec2) -> Self {
-        CardCreation {
+        StackCreation {
             background: images.background.clone(),
             border: images.border.clone(),
             hover_overlay: images.hover_overlay.clone(),
@@ -99,7 +99,6 @@ impl CardCreation {
                 font: fonts.title.clone(),
                 font_size: CARD_STACK_Y_SPACING,
                 color: CARD_FOREGROUND_COLOR,
-                ..default()
             },
             title_transform: Transform::from_xyz(
                 0.,
@@ -109,7 +108,7 @@ impl CardCreation {
         }
     }
 
-    pub fn spawn_card(&self, commands: &mut Commands, card: Card, position: Vec2) {
+    pub fn spawn_single_card(&self, commands: &mut Commands, card: Card, position: Vec2) {
         let card_id = commands
             .spawn_bundle(SpriteBundle {
                 texture: self.background.clone(),
@@ -160,15 +159,19 @@ impl CardCreation {
             })
             .id();
 
-        // Add the stack's root.
-        commands
-            .spawn_bundle(TransformBundle::from_transform(Transform::from_xyz(
-                position.x, position.y, 0.,
-            )))
-            .insert(StackPhysics)
-            .insert(CardStack(vec![card_id]))
-            .add_child(card_id);
+        spawn_stack_root(commands, position, &[card_id]);
     }
+}
+
+pub fn spawn_stack_root(commands: &mut Commands, position: Vec2, cards: &[Entity]) -> Entity {
+    commands
+        .spawn_bundle(TransformBundle::from_transform(Transform::from_xyz(
+            position.x, position.y, 0.,
+        )))
+        .insert(StackPhysics)
+        .insert_children(0, cards)
+        .insert(CardStack(Vec::from(cards)))
+        .id()
 }
 
 #[derive(Component, PartialEq, Eq, Clone)]
@@ -218,20 +221,20 @@ pub fn on_assets_loaded(
     let card_background = images.get(card_images.background.clone()).unwrap();
     commands.insert_resource(CardVisualSize(card_background.size()));
 
-    commands.insert_resource(CardCreation::new(
+    commands.insert_resource(StackCreation::new(
         &card_images,
         &card_fonts,
         card_background.size(),
     ));
 }
 
-pub fn spawn_test_cards(mut commands: Commands, creation: Res<CardCreation>) {
+pub fn spawn_test_cards(mut commands: Commands, creation: Res<StackCreation>) {
     for _ in 0..5 {
-        creation.spawn_card(&mut commands, card_types::WORKER, Vec2::ZERO);
+        creation.spawn_single_card(&mut commands, card_types::WORKER, Vec2::ZERO);
     }
 
     for _ in 0..5 {
-        creation.spawn_card(&mut commands, card_types::TREE, Vec2::ZERO);
+        creation.spawn_single_card(&mut commands, card_types::TREE, Vec2::ZERO);
     }
 }
 
@@ -518,7 +521,12 @@ pub fn merge_stacks(
 
     set_stack_card_transforms(commands, &combined_stack);
 
-    commands.entity(source_root).despawn();
+    // To cleanly remove the source root, the children need to be removed first.
+    // Otherwise they would get removed as well on a `despawn_recursive`.
+    // The reason the despawn is recursive, is to make sure no effects, overlays, or other
+    // things remain where the stack was.
+    commands.entity(source_root).remove_children(source_stack);
+    commands.entity(source_root).despawn_recursive();
 
     commands
         .entity(target_root)
@@ -556,14 +564,11 @@ pub fn split_stack(
             .remove_children(top_stack);
 
         // Create the new top stack root.
-        let new_root_id = commands
-            .spawn_bundle(TransformBundle::from_transform(Transform::from(
-                *new_bottom_card_global_transform,
-            )))
-            .insert_children(0, top_stack)
-            .insert(CardStack(Vec::from(top_stack)))
-            .insert(StackPhysics)
-            .id();
+        let new_root_id = spawn_stack_root(
+            commands,
+            new_bottom_card_global_transform.translation.truncate(),
+            top_stack,
+        );
 
         set_stack_card_transforms(commands, top_stack);
 
@@ -571,6 +576,38 @@ pub fn split_stack(
     } else {
         None
     }
+}
+
+/// Removes a card from the world.
+/// It does not matter if this card is in the middle of a stack,
+/// or the only card in a stack. This function will handle it gracefully.
+/// The effects are applied via [Commands].
+pub fn delete_card(
+    commands: &mut Commands,
+    card_to_delete: Entity,
+    stack_root: Entity,
+    stack: &[Entity],
+) {
+    // TODO (Wybe 2022-05-24): There is probably a more efficient way than re-initializing
+    //      the whole stack's Vec every time a card is deleted. but this works for now.
+    //      (don't do pre-mature optimizations and all that).
+
+    if stack[0] == card_to_delete && stack.len() == 1 {
+        // Last card in the stack. Delete the stack as well.
+        commands.entity(stack_root).despawn_recursive();
+    } else {
+        let new_stack = CardStack(
+            stack
+                .iter()
+                .copied()
+                .filter(|&e| e != card_to_delete)
+                .collect(),
+        );
+        set_stack_card_transforms(commands, &new_stack.0);
+        commands.entity(stack_root).insert(new_stack);
+    }
+
+    commands.entity(card_to_delete).despawn_recursive();
 }
 
 /// When given a stack of cards, this function stacks them all nicely.

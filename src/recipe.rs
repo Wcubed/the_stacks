@@ -1,4 +1,4 @@
-use crate::card::{Card, CardCreation, CardStack};
+use crate::card::{delete_card, Card, CardStack, StackCreation};
 use crate::card_types::CardType::Worker;
 use crate::card_types::{LOG, PLANK};
 use crate::{card_types, GameState};
@@ -31,16 +31,27 @@ impl Plugin for RecipePlugin {
                         && cards.len() > 1
                 },
                 |mut commands: Commands,
-                 recipe_stack_query: Query<&GlobalTransform, With<FinishRecipeMarker>>,
-                 creation: Res<CardCreation>| {
-                    // TODO (Wybe 2022-05-23): Implement removing card from stack.
-                    // TODO (Wybe 2022-05-23): Make a stack a separate entity, with the first card as a child. That way, any components that apply to the full stack, stay when you remove something from a stack.
-                    for global_transform in recipe_stack_query.iter() {
-                        creation.spawn_card(
+                 recipe_stack_query: Query<
+                    (Entity, &CardStack, &GlobalTransform),
+                    With<FinishRecipeMarker>,
+                >,
+                 card_query: Query<&Card>,
+                 creation: Res<StackCreation>| {
+                    for (root, stack, global_transform) in recipe_stack_query.iter() {
+                        creation.spawn_single_card(
                             &mut commands,
                             LOG,
                             global_transform.translation.truncate(),
                         );
+
+                        for &card_entity in stack.iter() {
+                            let card = card_query.get(card_entity).unwrap();
+                            if card == &card_types::TREE {
+                                // The recipe consumes a single tree.
+                                delete_card(&mut commands, card_entity, root, stack);
+                                break;
+                            }
+                        }
                     }
                 },
             )
@@ -53,9 +64,9 @@ impl Plugin for RecipePlugin {
                 },
                 |mut commands: Commands,
                  recipe_stack_query: Query<&GlobalTransform, With<FinishRecipeMarker>>,
-                 creation: Res<CardCreation>| {
+                 creation: Res<StackCreation>| {
                     for global_transform in recipe_stack_query.iter() {
-                        creation.spawn_card(
+                        creation.spawn_single_card(
                             &mut commands,
                             PLANK,
                             global_transform.translation.truncate(),
