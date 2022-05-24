@@ -63,14 +63,27 @@ impl Plugin for RecipePlugin {
                         && cards.iter().any(|c| c.card_type == Worker)
                 },
                 |mut commands: Commands,
-                 recipe_stack_query: Query<&GlobalTransform, With<FinishRecipeMarker>>,
+                 recipe_stack_query: Query<
+                    (Entity, &CardStack, &GlobalTransform),
+                    With<FinishRecipeMarker>,
+                >,
+                 card_query: Query<&Card>,
                  creation: Res<StackCreation>| {
-                    for global_transform in recipe_stack_query.iter() {
+                    for (root, stack, global_transform) in recipe_stack_query.iter() {
                         creation.spawn_single_card(
                             &mut commands,
                             PLANK,
                             global_transform.translation.truncate(),
                         );
+
+                        for &card_entity in stack.iter() {
+                            let card = card_query.get(card_entity).unwrap();
+                            if card == &card_types::LOG {
+                                // The recipe consumes a single log.
+                                delete_card(&mut commands, card_entity, root, stack);
+                                break;
+                            }
+                        }
                     }
                 },
             )
@@ -144,6 +157,7 @@ pub struct Recipe {
     /// Only called a maximum of once per frame.
     /// The stacks that need to be handled will be indicated by a [FinishRecipeMarker].
     /// If there are multiple stacks ready with this recipe, they need to be handled all at once.
+    /// Any commands given to a [Commands] object will be applied immediately afterwards.
     ///
     /// Do not worry about leaving a [FinishRecipeMarker] lying around,
     /// it will be cleaned up automatically.
