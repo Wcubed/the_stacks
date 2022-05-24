@@ -14,7 +14,6 @@ impl Plugin for RecipePlugin {
         app.add_event::<RecipeReadyMarker>().add_system_set(
             SystemSet::on_update(GameState::Run)
                 .with_system(recipe_check_system)
-                .with_system(recipe_cleanup_system)
                 .with_system(recipe_timer_update_system)
                 .with_system(recipe_finished_exclusive_system.exclusive_system().at_end()),
         );
@@ -104,7 +103,7 @@ impl<'a> RecipesBuilder<'a> {
         finished_system: impl IntoSystem<(), (), Params> + 'static,
     ) -> Self {
         let mut boxed_system = Box::new(IntoSystem::into_system(finished_system));
-        boxed_system.initialize(&mut self.world);
+        boxed_system.initialize(self.world);
 
         let id = RecipeId(name);
 
@@ -143,13 +142,11 @@ pub struct Recipe {
 /// Checks whether stacks are valid recipes or not.
 pub fn recipe_check_system(
     mut commands: Commands,
-    stacks: Query<(&CardStack, Option<&RecipeId>), Changed<CardStack>>,
+    stacks: Query<(Entity, &CardStack, Option<&RecipeId>), Changed<CardStack>>,
     cards: Query<&Card>,
     recipes: Res<Recipes>,
 ) {
-    for (stack, maybe_ongoing_recipe) in stacks.iter() {
-        let root_card = stack[0];
-
+    for (root, stack, maybe_ongoing_recipe) in stacks.iter() {
         let cards_in_stack = stack.iter().map(|&e| cards.get(e).unwrap()).collect();
 
         let mut recipe_found = false;
@@ -165,7 +162,7 @@ pub fn recipe_check_system(
         if !recipe_found {
             for (&id, recipe) in recipes.iter() {
                 if (recipe.valid_callback)(&cards_in_stack) {
-                    commands.entity(root_card).insert(id);
+                    commands.entity(root).insert(id);
 
                     // Stop at the first recipe found (best not to have overlapping recipes)
                     recipe_found = true;
@@ -175,18 +172,8 @@ pub fn recipe_check_system(
         }
 
         if !recipe_found {
-            commands.entity(root_card).remove::<RecipeId>();
+            commands.entity(root).remove::<RecipeId>();
         }
-    }
-}
-
-/// Removes recipe markers from cards that are no longer the root of a stack.
-pub fn recipe_cleanup_system(
-    mut commands: Commands,
-    cards_that_are_no_longer_stacks: Query<Entity, (With<RecipeId>, Without<CardStack>)>,
-) {
-    for card in cards_that_are_no_longer_stacks.iter() {
-        commands.entity(card).remove::<RecipeId>();
     }
 }
 
@@ -195,9 +182,9 @@ pub fn recipe_timer_update_system(
     ongoing_recipes: Query<(Entity, &RecipeId), With<CardStack>>,
 ) {
     // TODO (Wybe 2022-05-22): Add an actual timer.
-    for (root_card, &recipe_id) in ongoing_recipes.iter() {
+    for (root, &recipe_id) in ongoing_recipes.iter() {
         commands
-            .entity(root_card)
+            .entity(root)
             .insert(RecipeReadyMarker(recipe_id))
             .remove::<RecipeId>();
     }
