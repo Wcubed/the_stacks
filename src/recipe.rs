@@ -1,6 +1,7 @@
-use crate::card::{delete_card, Card, CardStack, StackCreation};
+use crate::card::{Card, CardStack};
 use crate::card_types::CardType::Worker;
 use crate::card_types::{LOG, PLANK};
+use crate::stack_utils::{delete_card, StackCreation};
 use crate::{card_types, GameState};
 use bevy::prelude::*;
 use std::collections::HashMap;
@@ -38,10 +39,10 @@ impl Plugin for RecipePlugin {
                  card_query: Query<&Card>,
                  creation: Res<StackCreation>| {
                     for (root, stack, global_transform) in recipe_stack_query.iter() {
-                        creation.spawn_single_card(
+                        creation.spawn_stack(
                             &mut commands,
-                            LOG,
                             global_transform.translation.truncate(),
+                            &[LOG, LOG],
                         );
 
                         for &card_entity in stack.iter() {
@@ -70,10 +71,10 @@ impl Plugin for RecipePlugin {
                  card_query: Query<&Card>,
                  creation: Res<StackCreation>| {
                     for (root, stack, global_transform) in recipe_stack_query.iter() {
-                        creation.spawn_single_card(
+                        creation.spawn_stack(
                             &mut commands,
-                            PLANK,
                             global_transform.translation.truncate(),
+                            &[PLANK],
                         );
 
                         for &card_entity in stack.iter() {

@@ -1,4 +1,5 @@
-use crate::card_types::CardType;
+use crate::card_types::{CardType, TREE, WORKER};
+use crate::stack_utils::{set_stack_card_transforms, StackCreation, CARD_STACK_Y_SPACING};
 use crate::{card_types, GameState};
 use bevy::math::{const_vec2, const_vec3};
 use bevy::prelude::*;
@@ -18,13 +19,7 @@ const CARD_OVERLAP_MOVEMENT: f32 = 1000.0;
 const CARD_OVERLAP_SPACING: Vec2 = const_vec2!([10.0, 10.0]);
 
 /// Tiny change in Z position, used to put sprites "in front" of other sprites.
-const DELTA_Z: f32 = 0.001;
-
-/// How much of the previous card you can see when stacking cards.
-const CARD_STACK_Y_SPACING: f32 = 50.0;
-
-const CARD_HOVER_OVERLAY_COLOR: Color = Color::rgba(1., 1., 1., 0.1);
-const CARD_FOREGROUND_COLOR: Color = Color::rgb(0.8, 0.8, 0.8);
+pub const DELTA_Z: f32 = 0.001;
 
 pub struct CardPlugin;
 
@@ -60,17 +55,17 @@ impl Plugin for CardPlugin {
 #[derive(AssetCollection)]
 pub struct CardImages {
     #[asset(path = "vector_images/card_background.png")]
-    background: Handle<Image>,
+    pub background: Handle<Image>,
     #[asset(path = "vector_images/card_border.png")]
-    border: Handle<Image>,
+    pub border: Handle<Image>,
     #[asset(path = "vector_images/card_hover_overlay.png")]
-    hover_overlay: Handle<Image>,
+    pub hover_overlay: Handle<Image>,
 }
 
 #[derive(AssetCollection)]
 pub struct CardFonts {
     #[asset(path = "fonts/FallingSky-JKwK.otf")]
-    title: Handle<Font>,
+    pub title: Handle<Font>,
 }
 
 /// Resource which indicates where in the world the mouse currently is.
@@ -79,100 +74,6 @@ pub struct MouseWorldPos(Option<Vec2>);
 /// Resource indicating how large the card texture looks on-screen.
 #[derive(Deref, DerefMut)]
 pub struct CardVisualSize(Vec2);
-
-/// Resource that contains everything needed to create new cards.
-pub struct StackCreation {
-    background: Handle<Image>,
-    border: Handle<Image>,
-    hover_overlay: Handle<Image>,
-    title_style: TextStyle,
-    title_transform: Transform,
-}
-
-impl StackCreation {
-    pub fn new(images: &CardImages, fonts: &CardFonts, visual_size: Vec2) -> Self {
-        StackCreation {
-            background: images.background.clone(),
-            border: images.border.clone(),
-            hover_overlay: images.hover_overlay.clone(),
-            title_style: TextStyle {
-                font: fonts.title.clone(),
-                font_size: CARD_STACK_Y_SPACING,
-                color: CARD_FOREGROUND_COLOR,
-            },
-            title_transform: Transform::from_xyz(
-                0.,
-                0.5 * (visual_size.y - CARD_STACK_Y_SPACING),
-                DELTA_Z,
-            ),
-        }
-    }
-
-    pub fn spawn_single_card(&self, commands: &mut Commands, card: Card, position: Vec2) {
-        let card_id = commands
-            .spawn_bundle(SpriteBundle {
-                texture: self.background.clone(),
-                sprite: Sprite {
-                    color: card.card_type.background_color(),
-                    ..default()
-                },
-                ..default()
-            })
-            .insert(card.clone())
-            .with_children(|parent| {
-                // Border
-                parent.spawn_bundle(SpriteBundle {
-                    texture: self.border.clone(),
-                    transform: Transform::from_xyz(0.0, 0.0, DELTA_Z),
-                    sprite: Sprite {
-                        color: CARD_FOREGROUND_COLOR,
-                        ..default()
-                    },
-                    ..default()
-                });
-                // Title text
-                parent.spawn_bundle(Text2dBundle {
-                    text: Text::with_section(
-                        card.title,
-                        self.title_style.clone(),
-                        TextAlignment {
-                            vertical: VerticalAlign::Center,
-                            horizontal: HorizontalAlign::Center,
-                        },
-                    ),
-                    transform: self.title_transform,
-                    ..default()
-                });
-                // Hover overlay
-                parent
-                    .spawn_bundle(SpriteBundle {
-                        texture: self.hover_overlay.clone(),
-                        sprite: Sprite {
-                            color: CARD_HOVER_OVERLAY_COLOR,
-                            ..default()
-                        },
-                        transform: Transform::from_xyz(0.0, 0.0, DELTA_Z * 1.5),
-                        visibility: Visibility { is_visible: false },
-                        ..default()
-                    })
-                    .insert(IsCardHoverOverlay);
-            })
-            .id();
-
-        spawn_stack_root(commands, position, &[card_id]);
-    }
-}
-
-pub fn spawn_stack_root(commands: &mut Commands, position: Vec2, cards: &[Entity]) -> Entity {
-    commands
-        .spawn_bundle(TransformBundle::from_transform(Transform::from_xyz(
-            position.x, position.y, 0.,
-        )))
-        .insert(StackPhysics)
-        .insert_children(0, cards)
-        .insert(CardStack(Vec::from(cards)))
-        .id()
-}
 
 #[derive(Component, PartialEq, Eq, Clone)]
 pub struct Card {
@@ -190,7 +91,7 @@ pub struct StackPhysics;
 /// Stacked cards are all direct children of the Stack entity.
 /// TODO (Wybe 2022-05-15): Write extensive tests for stacking and un-stacking.
 #[derive(Component, Deref, Debug)]
-pub struct CardStack(Vec<Entity>);
+pub struct CardStack(pub Vec<Entity>);
 
 /// Marks an entity that shows a card is being hovered.
 #[derive(Component)]
@@ -229,13 +130,8 @@ pub fn on_assets_loaded(
 }
 
 pub fn spawn_test_cards(mut commands: Commands, creation: Res<StackCreation>) {
-    for _ in 0..5 {
-        creation.spawn_single_card(&mut commands, card_types::WORKER, Vec2::ZERO);
-    }
-
-    for _ in 0..5 {
-        creation.spawn_single_card(&mut commands, card_types::TREE, Vec2::ZERO);
-    }
+    creation.spawn_stack(&mut commands, Vec2::ZERO, &[TREE, TREE, TREE]);
+    creation.spawn_stack(&mut commands, Vec2::ZERO, &[WORKER, WORKER]);
 }
 
 /// Should be added to [PreUpdate](CoreStage::PreUpdate) to make sure the mouse position is
@@ -329,7 +225,7 @@ pub fn card_mouse_pickup_system(
                         .remove::<StackPhysics>();
                 } else {
                     // Picking up some other card in the stack, which means splitting it.
-                    let new_root = split_stack(
+                    let new_root = crate::stack_utils::split_stack(
                         &mut commands,
                         stack_root.0,
                         &stack.0,
@@ -460,7 +356,8 @@ pub fn dropped_stack_merging_system(
                 continue;
             }
 
-            let center_of_top_card = center_of_top_card(stack_global_transform, target_stack.len());
+            let center_of_top_card =
+                crate::stack_utils::center_of_top_card(stack_global_transform, target_stack.len());
 
             // TODO (Wybe 2022-05-24): Also take into account rotating and scaling.
             if in_bounds(
@@ -471,7 +368,7 @@ pub fn dropped_stack_merging_system(
             .is_some()
             {
                 let (_, _, dropped_stack) = stack_query.get(*dropped_stack_root).unwrap();
-                merge_stacks(
+                crate::stack_utils::merge_stacks(
                     &mut commands,
                     *dropped_stack_root,
                     dropped_stack,
@@ -491,139 +388,6 @@ pub fn dropped_stack_merging_system(
     }
 }
 
-fn center_of_top_card(root_transform: &GlobalTransform, amount_of_cards: usize) -> GlobalTransform {
-    GlobalTransform::from_translation(
-        root_transform.translation
-            + root_transform.down()
-                * root_transform.scale
-                * CARD_STACK_Y_SPACING
-                * amount_of_cards as f32,
-    )
-}
-
-/// Adds the cards of the `source_stack` to the top of the `target_stack`.
-/// Assumes no duplicate cards.
-///
-/// Effects are applied via `Commands`, which means it is visible next update.
-pub fn merge_stacks(
-    commands: &mut Commands,
-    source_root: Entity,
-    source_stack: &[Entity],
-    target_root: Entity,
-    target_stack: &[Entity],
-) {
-    if source_stack.is_empty() || target_stack.is_empty() {
-        return;
-    }
-
-    let mut combined_stack = target_stack.to_owned();
-    combined_stack.extend(source_stack);
-
-    set_stack_card_transforms(commands, &combined_stack);
-
-    // To cleanly remove the source root, the children need to be removed first.
-    // Otherwise they would get removed as well on a `despawn_recursive`.
-    // The reason the despawn is recursive, is to make sure no effects, overlays, or other
-    // things remain where the stack was.
-    commands.entity(source_root).remove_children(source_stack);
-    commands.entity(source_root).despawn_recursive();
-
-    commands
-        .entity(target_root)
-        .insert(CardStack(combined_stack))
-        .insert_children(0, source_stack);
-}
-
-/// Splits a stack so that the `new_root` card is the root of a new stack.
-/// Effects are applied via `Commands`, which means it is visible next update.
-///
-/// Returns the Entity id of the newly created stack root, if the stack needed to be split.
-pub fn split_stack(
-    commands: &mut Commands,
-    stack_root: Entity,
-    stack: &[Entity],
-    new_bottom_card: Entity,
-    new_bottom_card_global_transform: &GlobalTransform,
-) -> Option<Entity> {
-    if stack.is_empty() {
-        return None;
-    }
-    if let Some(new_root_index) = stack.iter().position(|&e| e == new_bottom_card) {
-        if new_root_index == 0 {
-            // Picking up the root of a stack. No need to split.
-            return None;
-        }
-
-        let bottom_stack = &stack[0..new_root_index];
-        let top_stack = &stack[new_root_index..stack.len()];
-
-        // Update the old (now bottom) stack root.
-        commands
-            .entity(stack_root)
-            .insert(CardStack(Vec::from(bottom_stack)))
-            .remove_children(top_stack);
-
-        // Create the new top stack root.
-        let new_root_id = spawn_stack_root(
-            commands,
-            new_bottom_card_global_transform.translation.truncate(),
-            top_stack,
-        );
-
-        set_stack_card_transforms(commands, top_stack);
-
-        Some(new_root_id)
-    } else {
-        None
-    }
-}
-
-/// Removes a card from the world.
-/// It does not matter if this card is in the middle of a stack,
-/// or the only card in a stack. This function will handle it gracefully.
-/// The effects are applied via [Commands].
-pub fn delete_card(
-    commands: &mut Commands,
-    card_to_delete: Entity,
-    stack_root: Entity,
-    stack: &[Entity],
-) {
-    // TODO (Wybe 2022-05-24): There is probably a more efficient way than re-initializing
-    //      the whole stack's Vec every time a card is deleted. but this works for now.
-    //      (don't do pre-mature optimizations and all that).
-
-    if stack[0] == card_to_delete && stack.len() == 1 {
-        // Last card in the stack. Delete the stack as well.
-        commands.entity(stack_root).despawn_recursive();
-    } else {
-        let new_stack = CardStack(
-            stack
-                .iter()
-                .copied()
-                .filter(|&e| e != card_to_delete)
-                .collect(),
-        );
-        set_stack_card_transforms(commands, &new_stack.0);
-        commands.entity(stack_root).insert(new_stack);
-    }
-
-    commands.entity(card_to_delete).despawn_recursive();
-}
-
-/// When given a stack of cards, this function stacks them all nicely.
-/// Applies via commands, so effects are only visible next frame.
-fn set_stack_card_transforms(commands: &mut Commands, stack: &[Entity]) {
-    for (i, &card) in stack.iter().enumerate() {
-        commands.entity(card).insert(Transform::from_xyz(
-            0.,
-            -CARD_STACK_Y_SPACING * i as f32,
-            // Leave Z spacing for card overlays and such.
-            // TODO (Wybe 2022-05-24): Is there a better way than just arbitrarily keeping a certain space?
-            DELTA_Z * i as f32 * 2.,
-        ));
-    }
-}
-
 /// Slowly nudges stacks with [CardPhysics], until they don't overlap.
 /// TODO (Wybe 2022-05-21): This currently nudges cards that were just dropped, but not yet added to a stack.
 ///      It would probably be better to add dropped cards to a stack right away. And to remove picked up cards from a stack right away,
@@ -640,12 +404,14 @@ pub fn stack_overlap_nudging_system(
     ) = combinations.fetch_next()
     {
         let stack1_wanted_space =
-            stack_visual_size(card_visual_size.0, cards_in_stack1.len()) + CARD_OVERLAP_SPACING;
+            crate::stack_utils::stack_visual_size(card_visual_size.0, cards_in_stack1.len())
+                + CARD_OVERLAP_SPACING;
         let mut stack1_center = global_transform1.translation.truncate();
         stack1_center.y -= 0.5 * cards_in_stack1.len() as f32 * CARD_STACK_Y_SPACING;
 
         let stack2_wanted_space =
-            stack_visual_size(card_visual_size.0, cards_in_stack2.len()) + CARD_OVERLAP_SPACING;
+            crate::stack_utils::stack_visual_size(card_visual_size.0, cards_in_stack2.len())
+                + CARD_OVERLAP_SPACING;
         let mut stack2_center = global_transform2.translation.truncate();
         stack2_center.y -= 0.5 * cards_in_stack2.len() as f32 * CARD_STACK_Y_SPACING;
 
@@ -668,13 +434,6 @@ pub fn stack_overlap_nudging_system(
             transform2.translation -= movement;
         }
     }
-}
-
-fn stack_visual_size(single_card_visual_size: Vec2, cards_in_stack: usize) -> Vec2 {
-    Vec2::new(
-        single_card_visual_size.x,
-        single_card_visual_size.y + (cards_in_stack as f32 * CARD_STACK_Y_SPACING),
-    )
 }
 
 fn window_pos_to_world_pos(

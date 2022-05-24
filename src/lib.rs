@@ -2,6 +2,7 @@ mod camera;
 mod card;
 mod card_types;
 mod recipe;
+mod stack_utils;
 
 use crate::camera::OrthographicCameraPlugin;
 use crate::card::CardPlugin;
