@@ -5,6 +5,7 @@ use crate::stack_utils::{delete_card, StackCreation};
 use crate::{card_types, GameState};
 use bevy::prelude::*;
 use std::collections::HashMap;
+use std::time::Duration;
 
 /// Handles recipes on card stacks
 /// Requires [CardPlugin].
@@ -99,9 +100,14 @@ impl Plugin for RecipePlugin {
     }
 }
 
-/// Component indicating the id of an ongoing recipe.
-#[derive(Component, Default, PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(PartialEq, Eq, Hash, Clone, Copy)]
 pub struct RecipeId(&'static str);
+
+#[derive(Component)]
+pub struct OngoingRecipe {
+    id: RecipeId,
+    timer: Timer,
+}
 
 /// Component that marks a stack with a recipe ready to be finished.
 /// This is read by [recipe_finished_exclusive_system], which will finish the recipe.
@@ -173,7 +179,7 @@ pub struct Recipe {
 /// Checks whether stacks are valid recipes or not.
 pub fn recipe_check_system(
     mut commands: Commands,
-    stacks: Query<(Entity, &CardStack, Option<&RecipeId>), Changed<CardStack>>,
+    stacks: Query<(Entity, &CardStack, Option<&OngoingRecipe>), Changed<CardStack>>,
     cards: Query<&Card>,
     recipes: Res<Recipes>,
 ) {
@@ -182,9 +188,9 @@ pub fn recipe_check_system(
 
         let mut recipe_found = false;
 
-        if let Some(ongoing_recipe_id) = maybe_ongoing_recipe {
-            if let Some(ongoing_recipe) = recipes.get(ongoing_recipe_id) {
-                if (ongoing_recipe.valid_callback)(&cards_in_stack) {
+        if let Some(ongoing_recipe) = maybe_ongoing_recipe {
+            if let Some(recipe) = recipes.get(&ongoing_recipe.id) {
+                if (recipe.valid_callback)(&cards_in_stack) {
                     recipe_found = true;
                 }
             }
@@ -193,7 +199,11 @@ pub fn recipe_check_system(
         if !recipe_found {
             for (&id, recipe) in recipes.iter() {
                 if (recipe.valid_callback)(&cards_in_stack) {
-                    commands.entity(root).insert(id);
+                    commands.entity(root).insert(OngoingRecipe {
+                        id,
+                        // TODO (Wybe 2022-05-25): Allow recipes to have differing durations.
+                        timer: Timer::new(Duration::from_secs(1), false),
+                    });
 
                     // Stop at the first recipe found (best not to have overlapping recipes)
                     recipe_found = true;
@@ -203,21 +213,26 @@ pub fn recipe_check_system(
         }
 
         if !recipe_found {
-            commands.entity(root).remove::<RecipeId>();
+            commands.entity(root).remove::<OngoingRecipe>();
         }
     }
 }
 
 pub fn recipe_timer_update_system(
     mut commands: Commands,
-    ongoing_recipes: Query<(Entity, &RecipeId), With<CardStack>>,
+    mut ongoing_recipes: Query<(Entity, &mut OngoingRecipe), With<CardStack>>,
+    time: Res<Time>,
 ) {
     // TODO (Wybe 2022-05-22): Add an actual timer.
-    for (root, &recipe_id) in ongoing_recipes.iter() {
-        commands
-            .entity(root)
-            .insert(RecipeReadyMarker(recipe_id))
-            .remove::<RecipeId>();
+    for (root, mut recipe) in ongoing_recipes.iter_mut() {
+        recipe.timer.tick(time.delta());
+
+        if recipe.timer.finished() {
+            commands
+                .entity(root)
+                .insert(RecipeReadyMarker(recipe.id))
+                .remove::<OngoingRecipe>();
+        }
     }
 }
 
