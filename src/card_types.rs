@@ -1,46 +1,59 @@
 use crate::card::Card;
-use bevy::prelude::Color;
+use bevy::prelude::{Color, Component};
 
 #[derive(Eq, PartialEq, Clone, Copy)]
-pub enum CardType {
+pub enum CardCategory {
     Worker,
     Nature,
     Resource,
     Food,
 }
 
-impl CardType {
+impl CardCategory {
     pub fn background_color(&self) -> Color {
         match self {
-            CardType::Worker => Color::hsl(25., 0.8, 0.2),
-            CardType::Nature => Color::DARK_GREEN,
-            CardType::Resource => Color::BLUE,
-            CardType::Food => Color::OLIVE,
+            CardCategory::Worker => Color::hsl(25., 0.8, 0.2),
+            CardCategory::Nature => Color::DARK_GREEN,
+            CardCategory::Resource => Color::BLUE,
+            CardCategory::Food => Color::OLIVE,
         }
     }
 }
 
-pub(crate) const TREE: Card = Card {
+pub struct CardType {
+    pub title: &'static str,
+    pub category: CardCategory,
+}
+
+impl CardType {
+    pub fn get_card_component(&self) -> Card {
+        Card {
+            title: self.title,
+            category: self.category,
+        }
+    }
+}
+pub(crate) const TREE: CardType = CardType {
     title: "Tree",
-    card_type: CardType::Nature,
+    category: CardCategory::Nature,
 };
 
-pub(crate) const LOG: Card = Card {
+pub(crate) const LOG: CardType = CardType {
     title: "Log",
-    card_type: CardType::Resource,
+    category: CardCategory::Resource,
 };
 
-pub(crate) const APPLE: Card = Card {
+pub(crate) const APPLE: CardType = CardType {
     title: "Apple",
-    card_type: CardType::Food,
+    category: CardCategory::Food,
 };
 
-pub(crate) const PLANK: Card = Card {
+pub(crate) const PLANK: CardType = CardType {
     title: "Plank",
-    card_type: CardType::Resource,
+    category: CardCategory::Resource,
 };
 
-pub(crate) const WORKER: Card = Card {
+pub(crate) const WORKER: CardType = CardType {
     title: "Worker",
-    card_type: CardType::Worker,
+    category: CardCategory::Worker,
 };

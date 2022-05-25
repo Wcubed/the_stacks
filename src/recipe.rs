@@ -1,6 +1,6 @@
 use crate::card::{Card, CardStack, CardVisualSize, STACK_DRAG_Z};
-use crate::card_types::CardType::Worker;
-use crate::card_types::{APPLE, LOG, PLANK};
+use crate::card_types::CardCategory::Worker;
+use crate::card_types::{APPLE, LOG, PLANK, TREE};
 use crate::stack_utils::{delete_card, StackCreation};
 use crate::{card_types, GameState};
 use bevy::prelude::*;
@@ -38,9 +38,8 @@ impl Plugin for RecipePlugin {
                 2.,
                 |cards| {
                     // Exactly 1 of type Worker, and the rest trees.
-                    cards.iter().any(|c| c.card_type == Worker)
-                        && cards.iter().filter(|c| c == &&&card_types::TREE).count()
-                            == cards.len() - 1
+                    cards.iter().any(|c| c.category == Worker)
+                        && cards.iter().filter(|c| c.is_type(TREE)).count() == cards.len() - 1
                         && cards.len() > 1
                 },
                 |mut commands: Commands,
@@ -64,7 +63,7 @@ impl Plugin for RecipePlugin {
 
                         for &card_entity in stack.iter() {
                             let card = card_query.get(card_entity).unwrap();
-                            if card == &card_types::TREE {
+                            if card.is_type(TREE) {
                                 // The recipe consumes a single tree.
                                 delete_card(&mut commands, card_entity, root, stack);
                                 break;
@@ -78,8 +77,8 @@ impl Plugin for RecipePlugin {
                 3.,
                 |cards| {
                     cards.len() == 2
-                        && cards.contains(&&LOG)
-                        && cards.iter().any(|c| c.card_type == Worker)
+                        && cards.iter().any(|c| c.is_type(LOG))
+                        && cards.iter().any(|c| c.category == Worker)
                 },
                 |mut commands: Commands,
                  recipe_stack_query: Query<
@@ -97,7 +96,7 @@ impl Plugin for RecipePlugin {
 
                         for &card_entity in stack.iter() {
                             let card = card_query.get(card_entity).unwrap();
-                            if card == &card_types::LOG {
+                            if card.is_type(LOG) {
                                 // The recipe consumes a single log.
                                 delete_card(&mut commands, card_entity, root, stack);
                                 break;
@@ -151,7 +150,7 @@ impl<'a> RecipesBuilder<'a> {
     pub fn with<Params>(
         mut self,
         name: &'static str,
-        time: f32,
+        seconds: f32,
         valid_callback: fn(&Vec<&Card>) -> bool,
         finished_system: impl IntoSystem<(), (), Params> + 'static,
     ) -> Self {
@@ -161,7 +160,7 @@ impl<'a> RecipesBuilder<'a> {
         let id = RecipeId(name);
 
         let new_recipe = Recipe {
-            time,
+            seconds,
             valid_callback,
             finish_system: boxed_system,
         };
@@ -181,7 +180,7 @@ pub struct Recipes(HashMap<RecipeId, Recipe>);
 
 pub struct Recipe {
     /// Time the recipe takes, in seconds.
-    time: f32,
+    seconds: f32,
     /// This callback is called when cards are added or removed from stacks.
     /// Should return `true` if the given stack contents are valid for this recipe.
     valid_callback: fn(&Vec<&Card>) -> bool,
@@ -222,7 +221,7 @@ pub fn recipe_check_system(
                     commands.entity(root).insert(OngoingRecipe {
                         id,
                         // TODO (Wybe 2022-05-25): Allow recipes to have differing durations.
-                        timer: Timer::new(Duration::from_secs_f32(recipe.time), false),
+                        timer: Timer::new(Duration::from_secs_f32(recipe.seconds), false),
                     });
 
                     // Stop at the first recipe found (best not to have overlapping recipes)

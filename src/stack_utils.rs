@@ -1,6 +1,7 @@
 use crate::card::{
     Card, CardFonts, CardImages, CardStack, IsCardHoverOverlay, StackPhysics, DELTA_Z, STACK_ROOT_Z,
 };
+use crate::card_types::CardType;
 use bevy::prelude::*;
 
 /// How much of the previous card you can see when stacking cards.
@@ -37,7 +38,7 @@ impl StackCreation {
         }
     }
 
-    pub fn spawn_stack(&self, commands: &mut Commands, position: Vec2, cards: &[Card]) {
+    pub fn spawn_stack(&self, commands: &mut Commands, position: Vec2, cards: &[CardType]) {
         let entities: Vec<Entity> = cards
             .iter()
             .map(|card| self.spawn_card(commands, card))
@@ -48,17 +49,17 @@ impl StackCreation {
     }
 
     /// Spawns a loose card. The new card should be added to a stack straight away.
-    fn spawn_card(&self, commands: &mut Commands, card: &Card) -> Entity {
+    fn spawn_card(&self, commands: &mut Commands, card: &CardType) -> Entity {
         commands
             .spawn_bundle(SpriteBundle {
                 texture: self.background.clone(),
                 sprite: Sprite {
-                    color: card.card_type.background_color(),
+                    color: card.category.background_color(),
                     ..default()
                 },
                 ..default()
             })
-            .insert(card.clone())
+            .insert(card.get_card_component())
             .with_children(|parent| {
                 // Border
                 parent.spawn_bundle(SpriteBundle {

@@ -1,4 +1,4 @@
-use crate::card_types::{CardType, TREE, WORKER};
+use crate::card_types::{CardCategory, CardType, TREE, WORKER};
 use crate::stack_utils::{set_stack_card_transforms, StackCreation, CARD_STACK_Y_SPACING};
 use crate::{card_types, GameState};
 use bevy::math::{const_vec2, const_vec3};
@@ -76,10 +76,16 @@ pub struct MouseWorldPos(Option<Vec2>);
 #[derive(Deref, DerefMut)]
 pub struct CardVisualSize(pub(crate) Vec2);
 
-#[derive(Component, PartialEq, Eq, Clone)]
+#[derive(Component, Clone, Eq, PartialEq)]
 pub struct Card {
     pub(crate) title: &'static str,
-    pub(crate) card_type: CardType,
+    pub(crate) category: CardCategory,
+}
+
+impl Card {
+    pub fn is_type(&self, card_type: CardType) -> bool {
+        self.title == card_type.title && self.category == card_type.category
+    }
 }
 
 /// Marks stacks which should have physics applied.
