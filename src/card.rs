@@ -167,18 +167,13 @@ pub fn mouse_world_pos_update_system(
 pub fn stack_mouse_drop_system(
     mut commands: Commands,
     mouse_button: Res<Input<MouseButton>>,
-    mut dragged_stack_query: Query<
-        (Entity, &mut Transform, &GlobalTransform),
-        With<StackRelativeDragPosition>,
-    >,
+    dragged_stack_query: Query<(Entity, &GlobalTransform), With<StackRelativeDragPosition>>,
     mut stack_dropped_writer: EventWriter<StackDroppedEvent>,
 ) {
     if mouse_button.just_released(MouseButton::Left) {
-        for (root, mut transform, global_transform) in dragged_stack_query.iter_mut() {
+        for (root, global_transform) in dragged_stack_query.iter() {
             commands.entity(root).remove::<StackRelativeDragPosition>();
-            transform.translation.z = STACK_ROOT_Z;
-            transform.scale = Vec3::ONE;
-
+            // Translation is handled by the `dropped_stack_merging_system`
             stack_dropped_writer.send(StackDroppedEvent(root, *global_transform));
         }
     }
@@ -389,8 +384,16 @@ pub fn dropped_stack_merging_system(
         }
 
         if !stack_merged {
+            // Put stack back on the Z "floor"
+            let mut new_transform = Transform::from(*dropped_global_transform);
+            new_transform.translation.z = STACK_ROOT_Z;
+            new_transform.scale = Vec3::ONE;
+
             // Re-enable physics for the dropped stack.
-            commands.entity(*dropped_stack_root).insert(StackPhysics);
+            commands
+                .entity(*dropped_stack_root)
+                .insert(StackPhysics)
+                .insert(new_transform);
         }
     }
 }
