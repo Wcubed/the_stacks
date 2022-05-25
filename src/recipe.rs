@@ -116,7 +116,7 @@ impl Plugin for RecipePlugin {
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
 pub struct RecipeId(&'static str);
 
-#[derive(Component)]
+#[derive(Component, Clone)]
 pub struct OngoingRecipe {
     id: RecipeId,
     timer: Timer,

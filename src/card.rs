@@ -1,4 +1,5 @@
 use crate::card_types::{CardCategory, CardType, TREE, WORKER};
+use crate::recipe::OngoingRecipe;
 use crate::stack_utils::{
     get_semi_random_stack_root_z, StackCreation, CARD_STACK_Y_SPACING, STACK_ROOT_Z_RANGE,
 };
@@ -214,13 +215,13 @@ pub fn card_mouse_pickup_system(
     mut commands: Commands,
     mouse_button: Res<Input<MouseButton>>,
     hovered_card_query: Query<(Entity, &Parent, &HoveredCard, &GlobalTransform), With<Card>>,
-    stacks: Query<&CardStack>,
+    stacks: Query<(&CardStack, Option<&OngoingRecipe>)>,
 ) {
     if mouse_button.just_pressed(MouseButton::Left) {
         for (card_entity, stack_root, hovered_card_component, global_transform) in
             hovered_card_query.iter()
         {
-            if let Ok(stack) = stacks.get(stack_root.0) {
+            if let Ok((stack, maybe_recipe)) = stacks.get(stack_root.0) {
                 if stack[0] == card_entity {
                     // Picking up the whole stack
                     commands
@@ -235,6 +236,7 @@ pub fn card_mouse_pickup_system(
                         &mut commands,
                         stack_root.0,
                         &stack.0,
+                        maybe_recipe,
                         card_entity,
                         global_transform,
                     );
@@ -344,7 +346,7 @@ pub fn hover_drag_cursor_system(
 
 pub fn dropped_stack_merging_system(
     mut commands: Commands,
-    stack_query: Query<(Entity, &GlobalTransform, &CardStack)>,
+    stack_query: Query<(Entity, &GlobalTransform, &CardStack, Option<&OngoingRecipe>)>,
     card_visual_size: Res<CardVisualSize>,
     mut stack_dropped_reader: EventReader<StackDroppedEvent>,
 ) {
@@ -356,7 +358,9 @@ pub fn dropped_stack_merging_system(
         // Find which card we are overlapping the most.
         // TODO (Wybe 2022-05-14): This should also check if the card we are overlapping is
         //   a valid target to stack with.
-        for (stack_root, stack_global_transform, target_stack) in stack_query.iter() {
+        for (stack_root, stack_global_transform, target_stack, maybe_target_recipe) in
+            stack_query.iter()
+        {
             if stack_root == *dropped_stack_root {
                 // Cannot drop onto self.
                 continue;
@@ -373,13 +377,16 @@ pub fn dropped_stack_merging_system(
             )
             .is_some()
             {
-                let (_, _, dropped_stack) = stack_query.get(*dropped_stack_root).unwrap();
+                let (_, _, dropped_stack, maybe_source_recipe) =
+                    stack_query.get(*dropped_stack_root).unwrap();
                 crate::stack_utils::merge_stacks(
                     &mut commands,
                     *dropped_stack_root,
                     dropped_stack,
+                    maybe_source_recipe,
                     stack_root,
                     target_stack,
+                    maybe_target_recipe,
                 );
                 // Stack has been merged, no need to check other stacks.
                 stack_merged = true;

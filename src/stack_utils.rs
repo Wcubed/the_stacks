@@ -1,5 +1,6 @@
 use crate::card::{CardFonts, CardImages, CardStack, IsCardHoverOverlay, StackPhysics, DELTA_Z};
 use crate::card_types::CardType;
+use crate::recipe::OngoingRecipe;
 use bevy::prelude::*;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -208,15 +209,19 @@ pub fn center_of_top_card(
 
 /// Adds the cards of the `source_stack` to the top of the `target_stack`.
 /// Assumes no duplicate cards.
+/// If stacks have ongoing recipes, it will prefer the target stack's recipe when deciding
+/// which one to keep.
+/// Recipes that are no longer valid after the merge will be handled by [recipe_check_system](crate::recipe::recipe_check_system).
 ///
 /// Effects are applied via `Commands`, which means it is visible next update.
-/// TODO (Wybe 2022-05-25): Make sure upon merging we don't loose recipe progress if we don't have to.
 pub fn merge_stacks(
     commands: &mut Commands,
     source_root: Entity,
     source_stack: &[Entity],
+    source_stack_recipe: Option<&OngoingRecipe>,
     target_root: Entity,
     target_stack: &[Entity],
+    target_stack_recipe: Option<&OngoingRecipe>,
 ) {
     if source_stack.is_empty() || target_stack.is_empty() {
         return;
@@ -238,10 +243,18 @@ pub fn merge_stacks(
         .entity(target_root)
         .insert(CardStack(combined_stack))
         .insert_children(0, source_stack);
+
+    // Keep recipes. Prefer target stack recipe.
+    let kept_recipe = target_stack_recipe.or(source_stack_recipe);
+    if let Some(recipe) = kept_recipe {
+        commands.entity(target_root).insert(recipe.clone());
+    }
 }
 
 /// Splits a stack so that the `new_root` card is the root of a new stack.
 /// Effects are applied via `Commands`, which means it is visible next update.
+/// If a recipe is ongoing, the recipe will be kept on both child stacks.
+/// Recipes that are no longer valid after the split will be handled by [recipe_check_system](crate::recipe::recipe_check_system).
 ///
 /// Returns the Entity id of the newly created stack root, if the stack needed to be split.
 /// TODO (Wybe 2022-05-25): Make sure upon splitting we don't loose recipe progress if we don't have to.
@@ -249,6 +262,7 @@ pub fn split_stack(
     commands: &mut Commands,
     stack_root: Entity,
     stack: &[Entity],
+    ongoing_recipe: Option<&OngoingRecipe>,
     new_bottom_card: Entity,
     new_bottom_card_global_transform: &GlobalTransform,
 ) -> Option<Entity> {
@@ -279,6 +293,10 @@ pub fn split_stack(
             .insert(Transform::from(*new_bottom_card_global_transform));
 
         set_stack_card_transforms(commands, top_stack);
+
+        if let Some(recipe) = ongoing_recipe {
+            commands.entity(new_root_id).insert(recipe.clone());
+        }
 
         Some(new_root_id)
     } else {
