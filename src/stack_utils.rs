@@ -1,5 +1,5 @@
 use crate::card::{
-    Card, CardFonts, CardImages, CardStack, IsCardHoverOverlay, StackPhysics, DELTA_Z, STACK_ROOT_Z,
+    CardFonts, CardImages, CardStack, IsCardHoverOverlay, StackPhysics, DELTA_Z, STACK_ROOT_Z,
 };
 use crate::card_types::CardType;
 use bevy::prelude::*;
@@ -38,7 +38,7 @@ impl StackCreation {
         }
     }
 
-    pub fn spawn_stack(&self, commands: &mut Commands, position: Vec2, cards: &[CardType]) {
+    pub fn spawn_stack(&self, commands: &mut Commands, position: Vec3, cards: &[CardType]) {
         let entities: Vec<Entity> = cards
             .iter()
             .map(|card| self.spawn_card(commands, card))
@@ -109,13 +109,11 @@ impl StackCreation {
     }
 }
 
-fn spawn_stack_root(commands: &mut Commands, position: Vec2, cards: &[Entity]) -> Entity {
+fn spawn_stack_root(commands: &mut Commands, position: Vec3, cards: &[Entity]) -> Entity {
     commands
-        .spawn_bundle(TransformBundle::from_transform(Transform::from_xyz(
-            position.x,
-            position.y,
-            STACK_ROOT_Z,
-        )))
+        .spawn_bundle(TransformBundle::from_transform(
+            Transform::from_translation(position),
+        ))
         .insert(StackPhysics)
         .insert_children(0, cards)
         .insert(CardStack(Vec::from(cards)))
@@ -192,6 +190,7 @@ pub fn center_of_top_card(
 /// Assumes no duplicate cards.
 ///
 /// Effects are applied via `Commands`, which means it is visible next update.
+/// TODO (Wybe 2022-05-25): Make sure upon merging we don't loose recipe progress if we don't have to.
 pub fn merge_stacks(
     commands: &mut Commands,
     source_root: Entity,
@@ -225,6 +224,7 @@ pub fn merge_stacks(
 /// Effects are applied via `Commands`, which means it is visible next update.
 ///
 /// Returns the Entity id of the newly created stack root, if the stack needed to be split.
+/// TODO (Wybe 2022-05-25): Make sure upon splitting we don't loose recipe progress if we don't have to.
 pub fn split_stack(
     commands: &mut Commands,
     stack_root: Entity,
@@ -253,7 +253,7 @@ pub fn split_stack(
         // Create the new top stack root.
         let new_root_id = spawn_stack_root(
             commands,
-            new_bottom_card_global_transform.translation.truncate(),
+            new_bottom_card_global_transform.translation,
             top_stack,
         );
 

@@ -1,6 +1,6 @@
 use crate::card_types::{CardCategory, CardType, TREE, WORKER};
-use crate::stack_utils::{set_stack_card_transforms, StackCreation, CARD_STACK_Y_SPACING};
-use crate::{card_types, GameState};
+use crate::stack_utils::{StackCreation, CARD_STACK_Y_SPACING};
+use crate::GameState;
 use bevy::math::{const_vec2, const_vec3};
 use bevy::prelude::*;
 use bevy::render::camera::Camera2d;
@@ -137,8 +137,8 @@ pub fn on_assets_loaded(
 }
 
 pub fn spawn_test_cards(mut commands: Commands, creation: Res<StackCreation>) {
-    creation.spawn_stack(&mut commands, Vec2::ZERO, &[TREE, TREE, TREE]);
-    creation.spawn_stack(&mut commands, Vec2::ZERO, &[WORKER, WORKER]);
+    creation.spawn_stack(&mut commands, Vec3::ZERO, &[TREE, TREE, TREE]);
+    creation.spawn_stack(&mut commands, Vec3::ZERO, &[WORKER, WORKER]);
 }
 
 /// Should be added to [PreUpdate](CoreStage::PreUpdate) to make sure the mouse position is
