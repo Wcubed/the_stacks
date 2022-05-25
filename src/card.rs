@@ -117,6 +117,7 @@ pub struct HoveredCard {
 }
 
 /// Event sent by the [card_mouse_drag_system] when the user drops a card.
+/// Contains the stack root entity, and it's global transform upon being dropped.
 pub struct StackDroppedEvent(Entity, GlobalTransform);
 
 /// Event sent by the [card_mouse_drag_system] when the user picks up a card.

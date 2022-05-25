@@ -3,8 +3,9 @@ use crate::card_types::CardCategory::Worker;
 use crate::card_types::{APPLE, LOG, PLANK, TREE};
 use crate::stack_utils::{delete_card, StackCreation};
 use crate::{card_types, GameState};
+use bevy::ecs::event::Events;
 use bevy::prelude::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 /// Progress bars are located just underneath the dragged stacks on the z order.
@@ -22,7 +23,7 @@ pub struct RecipePlugin;
 
 impl Plugin for RecipePlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<RecipeReadyMarker>().add_system_set(
+        app.add_event::<FinishedRecipeEvent>().add_system_set(
             SystemSet::on_update(GameState::Run)
                 .with_system(recipe_check_system)
                 .with_system(recipe_timer_update_system)
@@ -140,6 +141,10 @@ pub struct FinishRecipeMarker;
 #[derive(Component)]
 pub struct RecipeUses(pub u32);
 
+/// Event that happens when a recipe has finished.
+/// Contains the relevant recipe id, and the root entity of the relevant stack.
+pub struct FinishedRecipeEvent(RecipeId, Entity);
+
 pub struct RecipesBuilder<'a> {
     world: &'a mut World,
     recipes: HashMap<RecipeId, Recipe>,
@@ -204,11 +209,28 @@ pub struct Recipe {
 /// Checks whether stacks are valid recipes or not.
 pub fn recipe_check_system(
     mut commands: Commands,
-    changed_stacks: Query<(Entity, &CardStack, Option<&OngoingRecipe>), Changed<CardStack>>,
+    changed_stacks: Query<(
+        Entity,
+        &CardStack,
+        Option<&OngoingRecipe>,
+        ChangeTrackers<CardStack>,
+    )>,
     cards: Query<&Card>,
     recipes: Res<Recipes>,
+    mut finished_recipe_events: EventReader<FinishedRecipeEvent>,
 ) {
-    for (root, stack, maybe_ongoing_recipe) in changed_stacks.iter() {
+    let finished_recipe_roots: HashSet<Entity> = finished_recipe_events
+        .iter()
+        .map(|FinishedRecipeEvent(_, root)| *root)
+        .collect();
+
+    for (root, stack, maybe_ongoing_recipe, stack_changed) in changed_stacks.iter() {
+        if !stack_changed.is_changed() && !finished_recipe_roots.contains(&root) {
+            // This stack didn't change, nor did it have a recipe finish.
+            // No need to check it again.
+            continue;
+        }
+
         let cards_in_stack = stack.iter().map(|&e| cards.get(e).unwrap()).collect();
 
         let mut recipe_found = false;
@@ -323,16 +345,20 @@ pub fn recipe_finished_exclusive_system(world: &mut World) {
         }
     }
 
-    // Clear all the `RecipeReadyMarker` components.
-    for roots in finished_recipes.values() {
-        for &root in roots {
-            if let Some(mut root) = world.get_entity_mut(root) {
-                root.remove::<RecipeReadyMarker>();
-
-                // TODO (Wybe 2022-05-25): If the card stack didn't change, the current recipy check system won't check the stack again. Fix this.
+    world.resource_scope(
+        |world, mut recipe_finished_events: Mut<Events<FinishedRecipeEvent>>| {
+            // Clear all the `RecipeReadyMarker` components.
+            for (&recipe, roots) in finished_recipes.iter() {
+                for &root in roots {
+                    if let Some(mut root_mut) = world.get_entity_mut(root) {
+                        root_mut.remove::<RecipeReadyMarker>();
+                        // Let other systems know which recipes were finished.
+                        recipe_finished_events.send(FinishedRecipeEvent(recipe, root));
+                    }
+                }
             }
-        }
-    }
+        },
+    );
 
     // Apply all the recipes.
     world.resource_scope(|world, mut recipes: Mut<Recipes>| {
