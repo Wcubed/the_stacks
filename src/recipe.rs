@@ -35,6 +35,7 @@ impl Plugin for RecipePlugin {
         let recipes = RecipesBuilder::new(world)
             .with(
                 "Cutting tree",
+                2.,
                 |cards| {
                     // Exactly 1 of type Worker, and the rest trees.
                     cards.iter().any(|c| c.card_type == Worker)
@@ -74,6 +75,7 @@ impl Plugin for RecipePlugin {
             )
             .with(
                 "Making plank",
+                3.,
                 |cards| {
                     cards.len() == 2
                         && cards.contains(&&LOG)
@@ -149,6 +151,7 @@ impl<'a> RecipesBuilder<'a> {
     pub fn with<Params>(
         mut self,
         name: &'static str,
+        time: f32,
         valid_callback: fn(&Vec<&Card>) -> bool,
         finished_system: impl IntoSystem<(), (), Params> + 'static,
     ) -> Self {
@@ -158,6 +161,7 @@ impl<'a> RecipesBuilder<'a> {
         let id = RecipeId(name);
 
         let new_recipe = Recipe {
+            time,
             valid_callback,
             finish_system: boxed_system,
         };
@@ -176,6 +180,8 @@ impl<'a> RecipesBuilder<'a> {
 pub struct Recipes(HashMap<RecipeId, Recipe>);
 
 pub struct Recipe {
+    /// Time the recipe takes, in seconds.
+    time: f32,
     /// This callback is called when cards are added or removed from stacks.
     /// Should return `true` if the given stack contents are valid for this recipe.
     valid_callback: fn(&Vec<&Card>) -> bool,
@@ -216,7 +222,7 @@ pub fn recipe_check_system(
                     commands.entity(root).insert(OngoingRecipe {
                         id,
                         // TODO (Wybe 2022-05-25): Allow recipes to have differing durations.
-                        timer: Timer::new(Duration::from_secs(1), false),
+                        timer: Timer::new(Duration::from_secs_f32(recipe.time), false),
                     });
 
                     // Stop at the first recipe found (best not to have overlapping recipes)
