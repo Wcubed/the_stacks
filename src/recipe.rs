@@ -50,18 +50,23 @@ impl Plugin for RecipePlugin {
                  mut card_query: Query<(&Card, &mut RecipeUses)>,
                  creation: Res<StackCreation>| {
                     for (root, stack, global_transform) in recipe_stack_query.iter() {
-                        creation.spawn_stack(&mut commands, global_transform.translation, &[LOG]);
+                        creation.spawn_stack(
+                            &mut commands,
+                            global_transform.translation.truncate(),
+                            &[LOG],
+                        );
 
                         for &card_entity in stack.iter() {
-                            let (card, mut uses) = card_query.get_mut(card_entity).unwrap();
-                            if card.is_type(TREE) {
-                                // The recipe consumes 1 use of a tree.
-                                if uses.0 == 1 {
-                                    delete_card(&mut commands, card_entity, root, stack);
-                                } else {
-                                    uses.0 -= 1;
+                            if let Ok((card, mut uses)) = card_query.get_mut(card_entity) {
+                                if card.is_type(TREE) {
+                                    // The recipe consumes 1 use of a tree.
+                                    if uses.0 == 1 {
+                                        delete_card(&mut commands, card_entity, root, stack);
+                                    } else {
+                                        uses.0 -= 1;
+                                    }
+                                    break;
                                 }
-                                break;
                             }
                         }
                     }
@@ -83,14 +88,19 @@ impl Plugin for RecipePlugin {
                  card_query: Query<&Card>,
                  creation: Res<StackCreation>| {
                     for (root, stack, global_transform) in recipe_stack_query.iter() {
-                        creation.spawn_stack(&mut commands, global_transform.translation, &[PLANK]);
+                        creation.spawn_stack(
+                            &mut commands,
+                            global_transform.translation.truncate(),
+                            &[PLANK],
+                        );
 
                         for &card_entity in stack.iter() {
-                            let card = card_query.get(card_entity).unwrap();
-                            if card.is_type(LOG) {
-                                // The recipe consumes a single log.
-                                delete_card(&mut commands, card_entity, root, stack);
-                                break;
+                            if let Ok(card) = card_query.get(card_entity) {
+                                if card.is_type(LOG) {
+                                    // The recipe consumes a single log.
+                                    delete_card(&mut commands, card_entity, root, stack);
+                                    break;
+                                }
                             }
                         }
                     }

@@ -1,11 +1,18 @@
-use crate::card::{
-    CardFonts, CardImages, CardStack, IsCardHoverOverlay, StackPhysics, DELTA_Z, STACK_ROOT_Z,
-};
+use crate::card::{CardFonts, CardImages, CardStack, IsCardHoverOverlay, StackPhysics, DELTA_Z};
 use crate::card_types::CardType;
 use bevy::prelude::*;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+use std::ops::Range;
+use std::ptr::hash;
 
 /// How much of the previous card you can see when stacking cards.
 pub const CARD_STACK_Y_SPACING: f32 = 50.0;
+
+/// Range of Z positions stacks have when laying on the ground.
+/// When a stack is created or dropped, it picks a semi-random number in the range.
+/// This should minimize overlap among card foreground sprites.
+pub const STACK_ROOT_Z_RANGE: Range<f32> = 1.0..100.0;
 
 const CARD_HOVER_OVERLAY_COLOR: Color = Color::rgba(1., 1., 1., 0.1);
 const CARD_FOREGROUND_COLOR: Color = Color::rgb(0.8, 0.8, 0.8);
@@ -38,7 +45,7 @@ impl StackCreation {
         }
     }
 
-    pub fn spawn_stack(&self, commands: &mut Commands, position: Vec3, cards: &[CardType]) {
+    pub fn spawn_stack(&self, commands: &mut Commands, position: Vec2, cards: &[CardType]) {
         let entities: Vec<Entity> = cards
             .iter()
             .map(|card| self.spawn_card(commands, card))
@@ -109,15 +116,28 @@ impl StackCreation {
     }
 }
 
-fn spawn_stack_root(commands: &mut Commands, position: Vec3, cards: &[Entity]) -> Entity {
+fn spawn_stack_root(commands: &mut Commands, position: Vec2, cards: &[Entity]) -> Entity {
     commands
-        .spawn_bundle(TransformBundle::from_transform(
-            Transform::from_translation(position),
-        ))
+        .spawn_bundle(TransformBundle::from_transform(Transform::from_xyz(
+            position.x,
+            position.y,
+            get_semi_random_stack_root_z(cards[0]),
+        )))
         .insert(StackPhysics)
         .insert_children(0, cards)
         .insert(CardStack(Vec::from(cards)))
         .id()
+}
+
+/// Generates a semi-random z position for a stack, based on either the entity id of the stack
+/// itself, or if that is not available, any other entity id.
+/// Should have the effect of minimizing the clipping of card foreground sprites.
+pub fn get_semi_random_stack_root_z(entity: Entity) -> f32 {
+    let mut hasher = DefaultHasher::new();
+    entity.hash(&mut hasher);
+
+    STACK_ROOT_Z_RANGE.start
+        + (hasher.finish() as f32 * DELTA_Z) % (STACK_ROOT_Z_RANGE.end - STACK_ROOT_Z_RANGE.start)
 }
 
 /// When given a stack of cards, this function stacks them all nicely.
@@ -251,11 +271,12 @@ pub fn split_stack(
             .remove_children(top_stack);
 
         // Create the new top stack root.
-        let new_root_id = spawn_stack_root(
-            commands,
-            new_bottom_card_global_transform.translation,
-            top_stack,
-        );
+        let new_root_id = spawn_stack_root(commands, Vec2::ZERO, top_stack);
+        // We explicitly set the transform here, because the default stack spawner will randomize
+        // the Z height. Instead, we want it to be right where the hovered card was.
+        commands
+            .entity(new_root_id)
+            .insert(Transform::from(*new_bottom_card_global_transform));
 
         set_stack_card_transforms(commands, top_stack);
 

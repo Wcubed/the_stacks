@@ -1,5 +1,7 @@
 use crate::card_types::{CardCategory, CardType, TREE, WORKER};
-use crate::stack_utils::{StackCreation, CARD_STACK_Y_SPACING};
+use crate::stack_utils::{
+    get_semi_random_stack_root_z, StackCreation, CARD_STACK_Y_SPACING, STACK_ROOT_Z_RANGE,
+};
 use crate::GameState;
 use bevy::math::{const_vec2, const_vec3};
 use bevy::prelude::*;
@@ -7,9 +9,10 @@ use bevy::render::camera::Camera2d;
 use bevy_asset_loader::{AssetCollection, AssetLoader};
 use std::collections::HashSet;
 
-/// Z position stacks have when laying on the ground.
-pub const STACK_ROOT_Z: f32 = 1.0;
-pub const STACK_DRAG_Z: f32 = 200.0;
+/// Dragged cards have a z value that is higher than the cards that are still on the "floor".
+/// This way, they will never be overlapped by cards that they should logically be floating above.
+pub const STACK_DRAG_Z: f32 = STACK_ROOT_Z_RANGE.end + 100.0;
+
 /// Extra scaling a stack gets when a user "picks it up".
 /// This should help in giving the illusion of the stack being above the other stacks.
 const STACK_DRAG_SCALE: Vec3 = const_vec3!([1.1, 1.1, 1.]);
@@ -137,8 +140,8 @@ pub fn on_assets_loaded(
 }
 
 pub fn spawn_test_cards(mut commands: Commands, creation: Res<StackCreation>) {
-    creation.spawn_stack(&mut commands, Vec3::ZERO, &[TREE, TREE, TREE]);
-    creation.spawn_stack(&mut commands, Vec3::ZERO, &[WORKER, WORKER]);
+    creation.spawn_stack(&mut commands, Vec2::ZERO, &[TREE, TREE, TREE]);
+    creation.spawn_stack(&mut commands, Vec2::ZERO, &[WORKER, WORKER]);
 }
 
 /// Should be added to [PreUpdate](CoreStage::PreUpdate) to make sure the mouse position is
@@ -386,7 +389,7 @@ pub fn dropped_stack_merging_system(
         if !stack_merged {
             // Put stack back on the Z "floor"
             let mut new_transform = Transform::from(*dropped_global_transform);
-            new_transform.translation.z = STACK_ROOT_Z;
+            new_transform.translation.z = get_semi_random_stack_root_z(*dropped_stack_root);
             new_transform.scale = Vec3::ONE;
 
             // Re-enable physics for the dropped stack.
