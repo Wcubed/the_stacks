@@ -7,16 +7,17 @@ use bevy::render::camera::Camera2d;
 use bevy_asset_loader::{AssetCollection, AssetLoader};
 use std::collections::HashSet;
 
-const CARD_Z: f32 = 1.0;
-const CARD_DRAG_Z: f32 = 200.0;
-/// Extra scaling a card gets when a user "picks it up".
-/// This should help in giving the illusion of the card being above the other cards.
-const CARD_DRAG_SCALE: Vec3 = const_vec3!([1.1, 1.1, 1.]);
+/// Z position stacks have when laying on the ground.
+pub const STACK_ROOT_Z: f32 = 1.0;
+pub const STACK_DRAG_Z: f32 = 200.0;
+/// Extra scaling a stack gets when a user "picks it up".
+/// This should help in giving the illusion of the stack being above the other stacks.
+const STACK_DRAG_SCALE: Vec3 = const_vec3!([1.1, 1.1, 1.]);
 
-/// Max amount of display units a card moves per second if it overlaps with another.
-const CARD_OVERLAP_MOVEMENT: f32 = 1000.0;
-/// Spacing that cards want to keep between each other.
-const CARD_OVERLAP_SPACING: Vec2 = const_vec2!([10.0, 10.0]);
+/// Max amount of display units a stack moves per second if it overlaps with another.
+const STACK_OVERLAP_MOVEMENT: f32 = 1000.0;
+/// Spacing that stacks want to keep between each other.
+const STACK_OVERLAP_SPACING: Vec2 = const_vec2!([10.0, 10.0]);
 
 /// Tiny change in Z position, used to put sprites "in front" of other sprites.
 pub const DELTA_Z: f32 = 0.001;
@@ -73,7 +74,7 @@ pub struct MouseWorldPos(Option<Vec2>);
 
 /// Resource indicating how large the card texture looks on-screen.
 #[derive(Deref, DerefMut)]
-pub struct CardVisualSize(Vec2);
+pub struct CardVisualSize(pub(crate) Vec2);
 
 #[derive(Component, PartialEq, Eq, Clone)]
 pub struct Card {
@@ -169,7 +170,7 @@ pub fn stack_mouse_drop_system(
     if mouse_button.just_released(MouseButton::Left) {
         for (root, mut transform, global_transform) in dragged_stack_query.iter_mut() {
             commands.entity(root).remove::<StackRelativeDragPosition>();
-            transform.translation.z = CARD_Z;
+            transform.translation.z = STACK_ROOT_Z;
             transform.scale = Vec3::ONE;
 
             stack_dropped_writer.send(StackDroppedEvent(root, *global_transform));
@@ -195,8 +196,8 @@ pub fn stack_mouse_drag_system(
                 continue;
             }
 
-            transform.translation = (mouse_world_pos - drag_position.0).extend(CARD_DRAG_Z);
-            transform.scale = CARD_DRAG_SCALE;
+            transform.translation = (mouse_world_pos - drag_position.0).extend(STACK_DRAG_Z);
+            transform.scale = STACK_DRAG_SCALE;
         }
     }
 }
@@ -405,13 +406,13 @@ pub fn stack_overlap_nudging_system(
     {
         let stack1_wanted_space =
             crate::stack_utils::stack_visual_size(card_visual_size.0, cards_in_stack1.len())
-                + CARD_OVERLAP_SPACING;
+                + STACK_OVERLAP_SPACING;
         let mut stack1_center = global_transform1.translation.truncate();
         stack1_center.y -= 0.5 * cards_in_stack1.len() as f32 * CARD_STACK_Y_SPACING;
 
         let stack2_wanted_space =
             crate::stack_utils::stack_visual_size(card_visual_size.0, cards_in_stack2.len())
-                + CARD_OVERLAP_SPACING;
+                + STACK_OVERLAP_SPACING;
         let mut stack2_center = global_transform2.translation.truncate();
         stack2_center.y -= 0.5 * cards_in_stack2.len() as f32 * CARD_STACK_Y_SPACING;
 
@@ -422,7 +423,7 @@ pub fn stack_overlap_nudging_system(
             stack2_center,
             stack2_wanted_space,
         ) {
-            let max_movement_this_frame = CARD_OVERLAP_MOVEMENT * time.delta_seconds();
+            let max_movement_this_frame = STACK_OVERLAP_MOVEMENT * time.delta_seconds();
 
             let movement = if total_movement.length() <= max_movement_this_frame {
                 total_movement.extend(0.0)

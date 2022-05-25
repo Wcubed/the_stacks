@@ -1,5 +1,5 @@
 use crate::card::{
-    Card, CardFonts, CardImages, CardStack, IsCardHoverOverlay, StackPhysics, DELTA_Z,
+    Card, CardFonts, CardImages, CardStack, IsCardHoverOverlay, StackPhysics, DELTA_Z, STACK_ROOT_Z,
 };
 use bevy::prelude::*;
 
@@ -47,7 +47,7 @@ impl StackCreation {
         set_stack_card_transforms(commands, &entities);
     }
 
-    /// Spawns a loose card. Should be added to a stack straight away.
+    /// Spawns a loose card. The new card should be added to a stack straight away.
     fn spawn_card(&self, commands: &mut Commands, card: &Card) -> Entity {
         commands
             .spawn_bundle(SpriteBundle {
@@ -104,7 +104,9 @@ impl StackCreation {
 fn spawn_stack_root(commands: &mut Commands, position: Vec2, cards: &[Entity]) -> Entity {
     commands
         .spawn_bundle(TransformBundle::from_transform(Transform::from_xyz(
-            position.x, position.y, 0.,
+            position.x,
+            position.y,
+            STACK_ROOT_Z,
         )))
         .insert(StackPhysics)
         .insert_children(0, cards)

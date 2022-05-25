@@ -1,4 +1,4 @@
-use crate::card::{Card, CardStack};
+use crate::card::{Card, CardStack, CardVisualSize, STACK_DRAG_Z};
 use crate::card_types::CardType::Worker;
 use crate::card_types::{APPLE, LOG, PLANK};
 use crate::stack_utils::{delete_card, StackCreation};
@@ -6,6 +6,15 @@ use crate::{card_types, GameState};
 use bevy::prelude::*;
 use std::collections::HashMap;
 use std::time::Duration;
+
+/// Progress bars are located just underneath the dragged stacks on the z order.
+/// Contrary to dragged stacks, progress bar Z's are relative to their parent,
+/// so any dragged stack will have it's progress bar
+/// visible above the others.
+const RECIPE_PROGRESS_BAR_Z: f32 = STACK_DRAG_Z - 10.;
+
+const RECIPE_PROGRESS_BAR_HEIGHT: f32 = 20.;
+const RECIPE_PROGRESS_BAR_COLOR: Color = Color::WHITE;
 
 /// Handles recipes on card stacks
 /// Requires [CardPlugin].
@@ -17,6 +26,7 @@ impl Plugin for RecipePlugin {
             SystemSet::on_update(GameState::Run)
                 .with_system(recipe_check_system)
                 .with_system(recipe_timer_update_system)
+                .with_system(recipe_timer_graphics_system)
                 .with_system(recipe_finished_exclusive_system.exclusive_system().at_end()),
         );
 
@@ -108,6 +118,10 @@ pub struct OngoingRecipe {
     id: RecipeId,
     timer: Timer,
 }
+
+/// Component indicating a progress bar hovering over a currently ongoing recipe.
+#[derive(Component)]
+pub struct RecipeProgressBar;
 
 /// Component that marks a stack with a recipe ready to be finished.
 /// This is read by [recipe_finished_exclusive_system], which will finish the recipe.
@@ -232,6 +246,52 @@ pub fn recipe_timer_update_system(
                 .entity(root)
                 .insert(RecipeReadyMarker(recipe.id))
                 .remove::<OngoingRecipe>();
+        }
+    }
+}
+
+pub fn recipe_timer_graphics_system(
+    mut commands: Commands,
+    mut recipe_progress_bars: Query<
+        (Entity, &Parent, &mut Sprite, &mut Transform),
+        With<RecipeProgressBar>,
+    >,
+    ongoing_recipes: Query<&OngoingRecipe, (With<CardStack>, Changed<OngoingRecipe>)>,
+    stacks_with_new_recipes: Query<Entity, (With<CardStack>, Added<OngoingRecipe>)>,
+    card_visual_size: Res<CardVisualSize>,
+) {
+    // Create new progress bars
+    for root in stacks_with_new_recipes.iter() {
+        let progress_bar = commands
+            .spawn_bundle(SpriteBundle {
+                transform: Transform::from_xyz(
+                    0.,
+                    card_visual_size.y * 0.5 + RECIPE_PROGRESS_BAR_HEIGHT,
+                    RECIPE_PROGRESS_BAR_Z,
+                ),
+                sprite: Sprite {
+                    color: RECIPE_PROGRESS_BAR_COLOR,
+                    custom_size: Some(Vec2::new(0., RECIPE_PROGRESS_BAR_HEIGHT)),
+                    ..default()
+                },
+                ..default()
+            })
+            .insert(RecipeProgressBar)
+            .id();
+
+        commands.entity(root).add_child(progress_bar);
+    }
+
+    // Update existing progress bars
+    for (entity, root, mut sprite, mut transform) in recipe_progress_bars.iter_mut() {
+        if let Ok(recipe) = ongoing_recipes.get(root.0) {
+            let new_width = recipe.timer.percent() * card_visual_size.x;
+
+            sprite.custom_size = Some(Vec2::new(new_width, RECIPE_PROGRESS_BAR_HEIGHT));
+            transform.translation.x = (-card_visual_size.x * 0.5) + (new_width * 0.5);
+        } else {
+            // Recipe no longer ongoing. Remove progress bar.
+            commands.entity(entity).despawn_recursive();
         }
     }
 }
