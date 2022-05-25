@@ -50,7 +50,7 @@ impl StackCreation {
 
     /// Spawns a loose card. The new card should be added to a stack straight away.
     fn spawn_card(&self, commands: &mut Commands, card: &CardType) -> Entity {
-        commands
+        let entity = commands
             .spawn_bundle(SpriteBundle {
                 texture: self.background.clone(),
                 sprite: Sprite {
@@ -98,7 +98,14 @@ impl StackCreation {
                     })
                     .insert(IsCardHoverOverlay);
             })
-            .id()
+            .id();
+
+        // Call the custom on_spawn function, if there is one.
+        if let Some(on_spawn) = card.on_spawn {
+            on_spawn(commands, entity);
+        }
+
+        entity
     }
 }
 

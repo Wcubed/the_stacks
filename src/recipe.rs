@@ -47,25 +47,24 @@ impl Plugin for RecipePlugin {
                     (Entity, &CardStack, &GlobalTransform),
                     With<FinishRecipeMarker>,
                 >,
-                 card_query: Query<&Card>,
+                 mut card_query: Query<(&Card, &mut RecipeUses)>,
                  creation: Res<StackCreation>| {
                     for (root, stack, global_transform) in recipe_stack_query.iter() {
                         creation.spawn_stack(
                             &mut commands,
                             global_transform.translation.truncate(),
-                            &[LOG, LOG],
-                        );
-                        creation.spawn_stack(
-                            &mut commands,
-                            global_transform.translation.truncate(),
-                            &[APPLE],
+                            &[LOG],
                         );
 
                         for &card_entity in stack.iter() {
-                            let card = card_query.get(card_entity).unwrap();
+                            let (card, mut uses) = card_query.get_mut(card_entity).unwrap();
                             if card.is_type(TREE) {
-                                // The recipe consumes a single tree.
-                                delete_card(&mut commands, card_entity, root, stack);
+                                // The recipe consumes 1 use of a tree.
+                                if uses.0 == 1 {
+                                    delete_card(&mut commands, card_entity, root, stack);
+                                } else {
+                                    uses.0 -= 1;
+                                }
                                 break;
                             }
                         }
@@ -134,6 +133,11 @@ pub struct RecipeReadyMarker(RecipeId);
 #[derive(Component)]
 pub struct FinishRecipeMarker;
 
+/// Generic component that can be used by recipes to track how many "uses" there are left in a card.
+/// For example: A worker could chop wood from a tree multiple times, before the tree is deleted.
+#[derive(Component)]
+pub struct RecipeUses(pub u32);
+
 pub struct RecipesBuilder<'a> {
     world: &'a mut World,
     recipes: HashMap<RecipeId, Recipe>,
@@ -198,11 +202,11 @@ pub struct Recipe {
 /// Checks whether stacks are valid recipes or not.
 pub fn recipe_check_system(
     mut commands: Commands,
-    stacks: Query<(Entity, &CardStack, Option<&OngoingRecipe>), Changed<CardStack>>,
+    changed_stacks: Query<(Entity, &CardStack, Option<&OngoingRecipe>), Changed<CardStack>>,
     cards: Query<&Card>,
     recipes: Res<Recipes>,
 ) {
-    for (root, stack, maybe_ongoing_recipe) in stacks.iter() {
+    for (root, stack, maybe_ongoing_recipe) in changed_stacks.iter() {
         let cards_in_stack = stack.iter().map(|&e| cards.get(e).unwrap()).collect();
 
         let mut recipe_found = false;
@@ -242,7 +246,6 @@ pub fn recipe_timer_update_system(
     mut ongoing_recipes: Query<(Entity, &mut OngoingRecipe), With<CardStack>>,
     time: Res<Time>,
 ) {
-    // TODO (Wybe 2022-05-22): Add an actual timer.
     for (root, mut recipe) in ongoing_recipes.iter_mut() {
         recipe.timer.tick(time.delta());
 
@@ -321,9 +324,11 @@ pub fn recipe_finished_exclusive_system(world: &mut World) {
     // Clear all the `RecipeReadyMarker` components.
     for roots in finished_recipes.values() {
         for &root in roots {
-            world
-                .get_entity_mut(root)
-                .and_then(|mut e| e.remove::<RecipeReadyMarker>());
+            if let Some(mut root) = world.get_entity_mut(root) {
+                root.remove::<RecipeReadyMarker>();
+
+                // TODO (Wybe 2022-05-25): If the card stack didn't change, the current recipy check system won't check the stack again. Fix this.
+            }
         }
     }
 

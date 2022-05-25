@@ -1,5 +1,6 @@
 use crate::card::Card;
-use bevy::prelude::{Color, Component};
+use crate::recipe::RecipeUses;
+use bevy::prelude::*;
 
 #[derive(Eq, PartialEq, Clone, Copy)]
 pub enum CardCategory {
@@ -23,6 +24,9 @@ impl CardCategory {
 pub struct CardType {
     pub title: &'static str,
     pub category: CardCategory,
+    /// Function that is ran on spawn of a card.
+    /// Use this to add additional components.
+    pub on_spawn: Option<fn(&mut Commands, Entity)>,
 }
 
 impl CardType {
@@ -36,24 +40,31 @@ impl CardType {
 pub(crate) const TREE: CardType = CardType {
     title: "Tree",
     category: CardCategory::Nature,
+    on_spawn: Some(|commands: &mut Commands, card: Entity| {
+        commands.entity(card).insert(RecipeUses(3));
+    }),
 };
 
 pub(crate) const LOG: CardType = CardType {
     title: "Log",
     category: CardCategory::Resource,
+    on_spawn: None,
 };
 
 pub(crate) const APPLE: CardType = CardType {
     title: "Apple",
     category: CardCategory::Food,
+    on_spawn: None,
 };
 
 pub(crate) const PLANK: CardType = CardType {
     title: "Plank",
     category: CardCategory::Resource,
+    on_spawn: None,
 };
 
 pub(crate) const WORKER: CardType = CardType {
     title: "Worker",
     category: CardCategory::Worker,
+    on_spawn: None,
 };
