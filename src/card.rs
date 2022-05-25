@@ -1,7 +1,8 @@
 use crate::card_types::{CardCategory, CardType, TREE, WORKER};
 use crate::recipe::OngoingRecipe;
 use crate::stack_utils::{
-    get_semi_random_stack_root_z, StackCreation, CARD_STACK_Y_SPACING, STACK_ROOT_Z_RANGE,
+    center_of_top_card, get_semi_random_stack_root_z, merge_stacks, StackCreation,
+    CARD_STACK_Y_SPACING, STACK_ROOT_Z_RANGE,
 };
 use crate::GameState;
 use bevy::math::{const_vec2, const_vec3};
@@ -52,7 +53,8 @@ impl Plugin for CardPlugin {
                     .with_system(card_hover_system)
                     .with_system(hover_drag_cursor_system)
                     .with_system(stack_overlap_nudging_system)
-                    .with_system(dropped_stack_merging_system),
+                    .with_system(dropped_stack_merging_system)
+                    .with_system(find_stack_movement_target_system),
             );
     }
 }
@@ -95,6 +97,11 @@ impl Card {
 /// Marks stacks which should have physics applied.
 #[derive(Component)]
 pub struct StackPhysics;
+
+/// Marks a stack that wants to find a nice place to move to.
+/// [find_stack_movement_target_system] handles these stacks.
+#[derive(Component)]
+pub struct StackLookingForTargetLocation;
 
 /// Indicates this is the root entity of a stack of cards.
 /// Contains all cards, in-order.
@@ -142,8 +149,8 @@ pub fn on_assets_loaded(
 }
 
 pub fn spawn_test_cards(mut commands: Commands, creation: Res<StackCreation>) {
-    creation.spawn_stack(&mut commands, Vec2::ZERO, &[TREE, TREE, TREE]);
-    creation.spawn_stack(&mut commands, Vec2::ZERO, &[WORKER, WORKER]);
+    creation.spawn_stack(&mut commands, Vec2::ZERO, &[TREE, TREE, TREE], false);
+    creation.spawn_stack(&mut commands, Vec2::ZERO, &[WORKER, WORKER], false);
 }
 
 /// Should be added to [PreUpdate](CoreStage::PreUpdate) to make sure the mouse position is
@@ -455,6 +462,101 @@ pub fn stack_overlap_nudging_system(
             transform2.translation -= movement;
         }
     }
+}
+
+/// Handles stacks marked with [StackLookingForTargetLocation] (and removes the mark).
+/// Finds either an open space, or another stack that this one can combine with.
+pub fn find_stack_movement_target_system(
+    mut commands: Commands,
+    lost_stack_query: Query<
+        (Entity, &GlobalTransform, &CardStack, Option<&OngoingRecipe>),
+        With<StackLookingForTargetLocation>,
+    >,
+    potential_target_stack_query: Query<
+        (Entity, &GlobalTransform, &CardStack, Option<&OngoingRecipe>),
+        Without<StackLookingForTargetLocation>,
+    >,
+    cards: Query<&Card>,
+    card_visual_size: Res<CardVisualSize>,
+) {
+    let card_cross_sections_max_search_radius = 2.;
+    let search_radius_range = card_visual_size.length() * card_cross_sections_max_search_radius;
+
+    for (root, global_transform, stack, maybe_recipe) in lost_stack_query.iter() {
+        // Stacks want to auto-stack if they are of the same category.
+        // But that requires the stack looking for a position, to have all the same category in the
+        // first place.
+        // TODO (Wybe 2022-05-25): Prevent recipes from automatically forming.
+        // TODO (Wybe 2022-05-25): don't unwrap here.
+        let category = cards.get(stack[0]).unwrap().category;
+        if stack.iter().map(|&e| cards.get(e)).any(|maybe_card| {
+            if let Ok(card) = maybe_card {
+                card.category != category
+            } else {
+                false
+            }
+        }) {
+            // One of the cards has a different category.
+            // Therefore we can't auto stack.
+            commands
+                .entity(root)
+                .remove::<StackLookingForTargetLocation>()
+                .insert(StackPhysics);
+            break;
+        }
+
+        let mut target_found = false;
+
+        // TODO (Wybe 2022-05-25): Clean up so it isn't so nested.
+        for (target_root, target_global, target_stack, maybe_target_recipe) in
+            potential_target_stack_query.iter()
+        {
+            let top_card_transform = center_of_top_card(target_global, target_stack.len());
+
+            if (global_transform.translation.truncate() - top_card_transform.translation.truncate())
+                .length()
+                < search_radius_range
+            {
+                // Top card in range. Check if stack is of the same category.
+                // TODO (Wybe 2022-05-25): Refactor this conditional
+                if !target_stack
+                    .iter()
+                    .map(|&e| cards.get(e))
+                    .any(|maybe_card| {
+                        if let Ok(card) = maybe_card {
+                            card.category != category
+                        } else {
+                            false
+                        }
+                    })
+                {
+                    // Can auto-stack with this target stack.
+                    merge_stacks(
+                        &mut commands,
+                        root,
+                        stack,
+                        maybe_recipe,
+                        target_root,
+                        target_stack,
+                        maybe_target_recipe,
+                    );
+                    target_found = true;
+                    break;
+                }
+            }
+        }
+
+        if !target_found {
+            commands
+                .entity(root)
+                .remove::<StackLookingForTargetLocation>()
+                .insert(StackPhysics);
+        }
+    }
+
+    // TODO (Wybe 2022-05-25): Implement moving (teleporting for now) to the closest empty space
+    // TODO (Wybe 2022-05-25): Implement smoothly moving to the target (needs another system which handles the movement).
+    // TODO (Wybe 2022-05-25): Implement what happens when cards get picked up by the user during this movement.
 }
 
 fn window_pos_to_world_pos(

@@ -1,4 +1,7 @@
-use crate::card::{CardFonts, CardImages, CardStack, IsCardHoverOverlay, StackPhysics, DELTA_Z};
+use crate::card::{
+    CardFonts, CardImages, CardStack, IsCardHoverOverlay, StackLookingForTargetLocation,
+    StackPhysics, DELTA_Z,
+};
 use crate::card_types::CardType;
 use crate::recipe::OngoingRecipe;
 use bevy::prelude::*;
@@ -46,13 +49,21 @@ impl StackCreation {
         }
     }
 
-    pub fn spawn_stack(&self, commands: &mut Commands, position: Vec2, cards: &[CardType]) {
+    /// - `move_to_empty_space`: Whether this stack should try moving somewhere relatively empty nearby.
+    ///   Stacking on top of another, compatible, stack is also considered "moving to empty space".
+    pub fn spawn_stack(
+        &self,
+        commands: &mut Commands,
+        position: Vec2,
+        cards: &[CardType],
+        move_to_empty_space: bool,
+    ) {
         let entities: Vec<Entity> = cards
             .iter()
             .map(|card| self.spawn_card(commands, card))
             .collect();
 
-        spawn_stack_root(commands, position, &entities);
+        spawn_stack_root(commands, position, &entities, move_to_empty_space);
         set_stack_card_transforms(commands, &entities);
     }
 
@@ -117,17 +128,31 @@ impl StackCreation {
     }
 }
 
-fn spawn_stack_root(commands: &mut Commands, position: Vec2, cards: &[Entity]) -> Entity {
-    commands
+fn spawn_stack_root(
+    commands: &mut Commands,
+    position: Vec2,
+    cards: &[Entity],
+    move_to_empty_space: bool,
+) -> Entity {
+    let root_id = commands
         .spawn_bundle(TransformBundle::from_transform(Transform::from_xyz(
             position.x,
             position.y,
             get_semi_random_stack_root_z(cards[0]),
         )))
-        .insert(StackPhysics)
         .insert_children(0, cards)
         .insert(CardStack(Vec::from(cards)))
-        .id()
+        .id();
+
+    if move_to_empty_space {
+        commands
+            .entity(root_id)
+            .insert(StackLookingForTargetLocation);
+    } else {
+        commands.entity(root_id).insert(StackPhysics);
+    }
+
+    root_id
 }
 
 /// Generates a semi-random z position for a stack, based on either the entity id of the stack
@@ -257,7 +282,6 @@ pub fn merge_stacks(
 /// Recipes that are no longer valid after the split will be handled by [recipe_check_system](crate::recipe::recipe_check_system).
 ///
 /// Returns the Entity id of the newly created stack root, if the stack needed to be split.
-/// TODO (Wybe 2022-05-25): Make sure upon splitting we don't loose recipe progress if we don't have to.
 pub fn split_stack(
     commands: &mut Commands,
     stack_root: Entity,
@@ -285,7 +309,7 @@ pub fn split_stack(
             .remove_children(top_stack);
 
         // Create the new top stack root.
-        let new_root_id = spawn_stack_root(commands, Vec2::ZERO, top_stack);
+        let new_root_id = spawn_stack_root(commands, Vec2::ZERO, top_stack, false);
         // We explicitly set the transform here, because the default stack spawner will randomize
         // the Z height. Instead, we want it to be right where the hovered card was.
         commands

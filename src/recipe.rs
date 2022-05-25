@@ -55,6 +55,7 @@ impl Plugin for RecipePlugin {
                             &mut commands,
                             global_transform.translation.truncate(),
                             &[LOG],
+                            true,
                         );
 
                         for &card_entity in stack.iter() {
@@ -93,6 +94,7 @@ impl Plugin for RecipePlugin {
                             &mut commands,
                             global_transform.translation.truncate(),
                             &[PLANK],
+                            true,
                         );
 
                         for &card_entity in stack.iter() {
