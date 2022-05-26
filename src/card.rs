@@ -33,6 +33,9 @@ pub const DELTA_Z: f32 = 0.001;
 /// Used when a stack is moving on it's own.
 const STACK_AUTO_MOVEMENT_SPEED: f32 = 2000.0;
 
+const DROP_TARGET_SCALE_ANIMATION_AMOUNT: f32 = 0.02;
+const DROP_TARGET_SCALE_ANIMATION_SPEED: f32 = 4.0;
+
 pub struct CardPlugin;
 
 impl Plugin for CardPlugin {
@@ -55,6 +58,7 @@ impl Plugin for CardPlugin {
                 SystemSet::on_update(GameState::Run)
                     .with_system(stack_mouse_drag_system)
                     .with_system(stack_drop_target_visuals_system)
+                    .with_system(stack_drop_overlay_animation_system)
                     .with_system(card_mouse_pickup_system)
                     .with_system(stack_mouse_drop_system)
                     .with_system(card_hover_system)
@@ -290,9 +294,16 @@ pub fn stack_drop_target_visuals_system(
         (Entity, &CardStack, ChangeTrackers<CardStack>),
         Without<StackRelativeDragPosition>,
     >,
-    drop_target_overlay_query: Query<(Entity, &Parent), With<IsDropTargetOverlay>>,
+    mut drop_target_overlay_query: Query<
+        (Entity, &Parent, &mut Transform),
+        With<IsDropTargetOverlay>,
+    >,
     card_images: Res<CardImages>,
 ) {
+    // TODO (Wybe 2022-05-26): Refactor this to be less of an if/else spaghetti. Maybe make it multiple systems
+    // TODO (Wybe 2022-05-26): When a stack is moving on it's own. Or starts moving on it's own, it shouldn't be droppable.
+    // TODO (Wybe 2022-05-26): Make the droppable criteria a function, so that a dropped card can also make use of it.
+    // TODO (Wybe 2022-05-26): Ongoing recipe's are only drop targets if the current card wouldn't break the recipe (for example, when adding another tree to a woodcutting worker)
     if !dragged_stack_query.is_empty() {
         if drop_target_overlay_query.is_empty() {
             // Drag just started. Spawn in all overlays
@@ -312,14 +323,12 @@ pub fn stack_drop_target_visuals_system(
                 }
 
                 let maybe_overlay = drop_target_overlay_query
-                    .iter()
-                    .find(|(_, &parent)| parent.0 == root)
-                    .map(|(e, _)| e);
+                    .iter_mut()
+                    .find(|(_, &parent, _)| parent.0 == root)
+                    .map(|(_, _, transform)| transform);
 
-                if let Some(overlay) = maybe_overlay {
-                    commands.entity(overlay).insert(Transform::from_translation(
-                        relative_center_of_nth_card_in_stack(stack.len() - 1),
-                    ));
+                if let Some(mut transform) = maybe_overlay {
+                    transform.translation = stack_drop_overlay_relative_transform(stack.len());
                 } else {
                     spawn_stack_drop_overlay(
                         &mut commands,
@@ -332,10 +341,31 @@ pub fn stack_drop_target_visuals_system(
         }
     } else {
         // Nothing is being dragged. Delete the overlays.
-        for (overlay, _) in drop_target_overlay_query.iter() {
+        for (overlay, _, _) in drop_target_overlay_query.iter() {
             commands.entity(overlay).despawn();
         }
     }
+}
+
+pub fn stack_drop_overlay_animation_system(
+    mut drop_target_overlay_query: Query<&mut Transform, With<IsDropTargetOverlay>>,
+    time: Res<Time>,
+) {
+    let scale = Vec3::splat(
+        1.0 + (time.seconds_since_startup() * DROP_TARGET_SCALE_ANIMATION_SPEED as f64).sin()
+            as f32
+            * DROP_TARGET_SCALE_ANIMATION_AMOUNT,
+    );
+
+    for mut transform in drop_target_overlay_query.iter_mut() {
+        transform.scale = scale;
+    }
+}
+
+pub fn stack_drop_overlay_relative_transform(amount_of_cards_in_stack: usize) -> Vec3 {
+    let mut translation = relative_center_of_nth_card_in_stack(amount_of_cards_in_stack - 1);
+    translation.z += DELTA_Z * 3.0;
+    translation
 }
 
 fn spawn_stack_drop_overlay(
@@ -348,8 +378,8 @@ fn spawn_stack_drop_overlay(
         parent
             .spawn_bundle(SpriteBundle {
                 texture: overlay_image,
-                transform: Transform::from_translation(relative_center_of_nth_card_in_stack(
-                    amount_of_cards_in_stack - 1,
+                transform: Transform::from_translation(stack_drop_overlay_relative_transform(
+                    amount_of_cards_in_stack,
                 )),
                 ..default()
             })
@@ -452,6 +482,7 @@ pub fn dropped_stack_merging_system(
     card_visual_size: Res<CardVisualSize>,
     mut stack_dropped_reader: EventReader<StackDroppedEvent>,
 ) {
+    // TODO (Wybe 2022-05-26): Filter out stacks that were not shown as drop targets.
     for StackDroppedEvent(dropped_stack_root, dropped_global_transform) in
         stack_dropped_reader.iter()
     {
