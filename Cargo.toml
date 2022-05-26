@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 bevy = { version = "0.7.0", features = ["dynamic"] }
 bevy_asset_loader = "0.10.0"
+bevy_egui = "0.14.0"

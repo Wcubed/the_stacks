@@ -112,8 +112,8 @@ impl Plugin for RecipePlugin {
                 },
             )
             .with(
-                "Sell",
-                0.1,
+                "Selling cards",
+                0.5,
                 |cards| {
                     // Bottom card is a market, and there are sellable cards.
                     cards.first().filter(|c| c.is_type(MARKET)).is_some()

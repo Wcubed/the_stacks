@@ -98,9 +98,10 @@ pub struct CardVisualSize(pub(crate) Vec2);
 
 #[derive(Component, Clone, Eq, PartialEq)]
 pub struct Card {
-    pub(crate) title: &'static str,
-    pub(crate) category: CardCategory,
-    pub(crate) value: Option<usize>,
+    pub title: &'static str,
+    pub category: CardCategory,
+    pub description: &'static str,
+    pub value: Option<usize>,
 }
 
 impl Card {
