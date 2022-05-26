@@ -54,12 +54,12 @@ impl StackCreation {
         &self,
         commands: &mut Commands,
         position: Vec2,
-        cards: &[CardType],
+        card_type: CardType,
+        card_amount: usize,
         move_to_empty_space: bool,
     ) {
-        let entities: Vec<Entity> = cards
-            .iter()
-            .map(|card| self.spawn_card(commands, card))
+        let entities: Vec<Entity> = (0..card_amount)
+            .map(|i| self.spawn_card(commands, &card_type))
             .collect();
 
         StackCreation::spawn_stack_root(commands, position, &entities, move_to_empty_space);

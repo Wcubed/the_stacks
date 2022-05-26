@@ -1,6 +1,6 @@
 use crate::card::{Card, CardStack, CardVisualSize, STACK_DRAG_Z};
 use crate::card_types::CardCategory::Worker;
-use crate::card_types::{APPLE, LOG, PLANK, TREE};
+use crate::card_types::{APPLE, COIN, LOG, MARKET, PLANK, TREE};
 use crate::stack_utils::{delete_card, StackCreation};
 use crate::{card_types, GameState};
 use bevy::ecs::event::Events;
@@ -51,13 +51,6 @@ impl Plugin for RecipePlugin {
                  mut card_query: Query<(&Card, &mut RecipeUses)>,
                  creation: Res<StackCreation>| {
                     for (root, stack, global_transform) in recipe_stack_query.iter() {
-                        creation.spawn_stack(
-                            &mut commands,
-                            global_transform.translation.truncate(),
-                            &[LOG],
-                            true,
-                        );
-
                         for &card_entity in stack.iter() {
                             if let Ok((card, mut uses)) = card_query.get_mut(card_entity) {
                                 if card.is_type(TREE) {
@@ -67,6 +60,14 @@ impl Plugin for RecipePlugin {
                                     } else {
                                         uses.0 -= 1;
                                     }
+
+                                    creation.spawn_stack(
+                                        &mut commands,
+                                        global_transform.translation.truncate(),
+                                        LOG,
+                                        1,
+                                        true,
+                                    );
                                     break;
                                 }
                             }
@@ -90,20 +91,59 @@ impl Plugin for RecipePlugin {
                  card_query: Query<&Card>,
                  creation: Res<StackCreation>| {
                     for (root, stack, global_transform) in recipe_stack_query.iter() {
-                        creation.spawn_stack(
-                            &mut commands,
-                            global_transform.translation.truncate(),
-                            &[PLANK],
-                            true,
-                        );
-
                         for &card_entity in stack.iter() {
                             if let Ok(card) = card_query.get(card_entity) {
                                 if card.is_type(LOG) {
                                     // The recipe consumes a single log.
                                     delete_card(&mut commands, card_entity, root, stack);
+
+                                    creation.spawn_stack(
+                                        &mut commands,
+                                        global_transform.translation.truncate(),
+                                        PLANK,
+                                        1,
+                                        true,
+                                    );
                                     break;
                                 }
+                            }
+                        }
+                    }
+                },
+            )
+            .with(
+                "Sell",
+                0.1,
+                |cards| {
+                    // Bottom card is a market.
+                    // TODO (Wybe 2022-05-26): Check if there are sellable cards
+                    cards.first().filter(|c| c.is_type(MARKET)).is_some() && cards.len() >= 2
+                },
+                |mut commands: Commands,
+                 recipe_stack_query: Query<
+                    (Entity, &CardStack, &GlobalTransform),
+                    With<FinishRecipeMarker>,
+                >,
+                 card_query: Query<&Card>,
+                 creation: Res<StackCreation>| {
+                    // TODO (Wybe 2022-05-26): Only sell sellable cards.
+                    for (root, stack, global_transform) in recipe_stack_query.iter() {
+                        for &card_entity in stack.iter() {
+                            if let Ok(card) = card_query.get(card_entity) {
+                                // The recipe consumes a single card, other than then market itself.
+                                if card.is_type(MARKET) {
+                                    continue;
+                                }
+                                delete_card(&mut commands, card_entity, root, stack);
+
+                                creation.spawn_stack(
+                                    &mut commands,
+                                    global_transform.translation.truncate(),
+                                    COIN,
+                                    1,
+                                    true,
+                                );
+                                break;
                             }
                         }
                     }

@@ -1,4 +1,4 @@
-use crate::card_types::{CardCategory, CardType, TREE, WORKER};
+use crate::card_types::{CardCategory, CardType, MARKET, TREE, WORKER};
 use crate::recipe::OngoingRecipe;
 use crate::stack_utils::{
     get_semi_random_stack_root_z, global_center_of_top_card, merge_stacks,
@@ -173,8 +173,9 @@ pub fn on_assets_loaded(
 }
 
 pub fn spawn_test_cards(mut commands: Commands, creation: Res<StackCreation>) {
-    creation.spawn_stack(&mut commands, Vec2::ZERO, &[TREE, TREE, TREE], false);
-    creation.spawn_stack(&mut commands, Vec2::ZERO, &[WORKER, WORKER], false);
+    creation.spawn_stack(&mut commands, Vec2::ZERO, MARKET, 1, false);
+    creation.spawn_stack(&mut commands, Vec2::ZERO, TREE, 3, false);
+    creation.spawn_stack(&mut commands, Vec2::ZERO, WORKER, 2, false);
 }
 
 /// Should be added to [PreUpdate](CoreStage::PreUpdate) to make sure the mouse position is
@@ -680,7 +681,7 @@ pub fn find_stack_movement_target_system(
     cards: Query<&Card>,
     card_visual_size: Res<CardVisualSize>,
 ) {
-    let card_cross_sections_max_search_radius = 2.;
+    let card_cross_sections_max_search_radius = 1.5;
     let search_radius_range = card_visual_size.length() * card_cross_sections_max_search_radius;
 
     for (root, global_transform, stack) in lost_stack_query.iter() {

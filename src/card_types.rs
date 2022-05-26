@@ -4,19 +4,24 @@ use bevy::prelude::*;
 
 #[derive(Eq, PartialEq, Clone, Copy)]
 pub enum CardCategory {
+    /// Cards which are integral to the game system, such as the market to sell things.
+    SystemCard,
     Worker,
     Nature,
     Resource,
+    Valuable,
     Food,
 }
 
 impl CardCategory {
     pub fn background_color(&self) -> Color {
         match self {
+            CardCategory::SystemCard => Color::PURPLE,
             CardCategory::Worker => Color::hsl(25., 0.8, 0.2),
             CardCategory::Nature => Color::DARK_GREEN,
             CardCategory::Resource => Color::BLUE,
             CardCategory::Food => Color::OLIVE,
+            CardCategory::Valuable => Color::YELLOW,
         }
     }
 }
@@ -37,6 +42,13 @@ impl CardType {
         }
     }
 }
+
+pub(crate) const MARKET: CardType = CardType {
+    title: "Market",
+    category: CardCategory::SystemCard,
+    on_spawn: None,
+};
+
 pub(crate) const TREE: CardType = CardType {
     title: "Tree",
     category: CardCategory::Nature,
@@ -51,12 +63,6 @@ pub(crate) const LOG: CardType = CardType {
     on_spawn: None,
 };
 
-pub(crate) const APPLE: CardType = CardType {
-    title: "Apple",
-    category: CardCategory::Food,
-    on_spawn: None,
-};
-
 pub(crate) const PLANK: CardType = CardType {
     title: "Plank",
     category: CardCategory::Resource,
@@ -66,5 +72,17 @@ pub(crate) const PLANK: CardType = CardType {
 pub(crate) const WORKER: CardType = CardType {
     title: "Worker",
     category: CardCategory::Worker,
+    on_spawn: None,
+};
+
+pub(crate) const COIN: CardType = CardType {
+    title: "Coin",
+    category: CardCategory::Valuable,
+    on_spawn: None,
+};
+
+pub(crate) const APPLE: CardType = CardType {
+    title: "Apple",
+    category: CardCategory::Food,
     on_spawn: None,
 };
