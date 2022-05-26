@@ -100,6 +100,7 @@ pub struct CardVisualSize(pub(crate) Vec2);
 pub struct Card {
     pub(crate) title: &'static str,
     pub(crate) category: CardCategory,
+    pub(crate) value: Option<usize>,
 }
 
 impl Card {

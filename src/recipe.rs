@@ -117,7 +117,8 @@ impl Plugin for RecipePlugin {
                 |cards| {
                     // Bottom card is a market.
                     // TODO (Wybe 2022-05-26): Check if there are sellable cards
-                    cards.first().filter(|c| c.is_type(MARKET)).is_some() && cards.len() >= 2
+                    cards.first().filter(|c| c.is_type(MARKET)).is_some()
+                        && cards.iter().any(|c| c.value.is_some())
                 },
                 |mut commands: Commands,
                  recipe_stack_query: Query<
@@ -130,20 +131,21 @@ impl Plugin for RecipePlugin {
                     for (root, stack, global_transform) in recipe_stack_query.iter() {
                         for &card_entity in stack.iter() {
                             if let Ok(card) = card_query.get(card_entity) {
-                                // The recipe consumes a single card, other than then market itself.
-                                if card.is_type(MARKET) {
-                                    continue;
-                                }
-                                delete_card(&mut commands, card_entity, root, stack);
+                                // The recipe consumes a single card with a value.
+                                if let Some(value) = card.value {
+                                    delete_card(&mut commands, card_entity, root, stack);
 
-                                creation.spawn_stack(
-                                    &mut commands,
-                                    global_transform.translation.truncate(),
-                                    COIN,
-                                    1,
-                                    true,
-                                );
-                                break;
+                                    if value > 0 {
+                                        creation.spawn_stack(
+                                            &mut commands,
+                                            global_transform.translation.truncate(),
+                                            COIN,
+                                            value,
+                                            true,
+                                        );
+                                    }
+                                    break;
+                                }
                             }
                         }
                     }

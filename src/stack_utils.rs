@@ -58,8 +58,12 @@ impl StackCreation {
         card_amount: usize,
         move_to_empty_space: bool,
     ) {
+        if card_amount == 0 {
+            return;
+        }
+
         let entities: Vec<Entity> = (0..card_amount)
-            .map(|i| self.spawn_card(commands, &card_type))
+            .map(|_| self.spawn_card(commands, &card_type))
             .collect();
 
         StackCreation::spawn_stack_root(commands, position, &entities, move_to_empty_space);
