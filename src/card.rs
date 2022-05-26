@@ -602,7 +602,10 @@ pub fn find_stack_movement_target_system(
     >,
     potential_target_stack_query: Query<
         (Entity, &GlobalTransform, &CardStack),
-        Without<StackLookingForMovementTarget>,
+        (
+            Without<StackLookingForMovementTarget>,
+            Without<StackRelativeDragPosition>,
+        ),
     >,
     cards: Query<&Card>,
     card_visual_size: Res<CardVisualSize>,
