@@ -8,7 +8,6 @@ use bevy::prelude::*;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::ops::Range;
-use std::ptr::hash;
 
 /// How much of the previous card you can see when stacking cards.
 pub const CARD_STACK_Y_SPACING: f32 = 50.0;
@@ -63,7 +62,7 @@ impl StackCreation {
             .map(|card| self.spawn_card(commands, card))
             .collect();
 
-        spawn_stack_root(commands, position, &entities, move_to_empty_space);
+        StackCreation::spawn_stack_root(commands, position, &entities, move_to_empty_space);
         set_stack_card_transforms(commands, &entities);
     }
 
@@ -126,33 +125,33 @@ impl StackCreation {
 
         entity
     }
-}
 
-fn spawn_stack_root(
-    commands: &mut Commands,
-    position: Vec2,
-    cards: &[Entity],
-    move_to_empty_space: bool,
-) -> Entity {
-    let root_id = commands
-        .spawn_bundle(TransformBundle::from_transform(Transform::from_xyz(
-            position.x,
-            position.y,
-            get_semi_random_stack_root_z(cards[0]),
-        )))
-        .insert_children(0, cards)
-        .insert(CardStack(Vec::from(cards)))
-        .id();
+    fn spawn_stack_root(
+        commands: &mut Commands,
+        position: Vec2,
+        cards: &[Entity],
+        move_to_empty_space: bool,
+    ) -> Entity {
+        let root_id = commands
+            .spawn_bundle(TransformBundle::from_transform(Transform::from_xyz(
+                position.x,
+                position.y,
+                get_semi_random_stack_root_z(cards[0]),
+            )))
+            .insert_children(0, cards)
+            .insert(CardStack(Vec::from(cards)))
+            .id();
 
-    if move_to_empty_space {
-        commands
-            .entity(root_id)
-            .insert(StackLookingForMovementTarget);
-    } else {
-        commands.entity(root_id).insert(StackPhysics);
+        if move_to_empty_space {
+            commands
+                .entity(root_id)
+                .insert(StackLookingForMovementTarget);
+        } else {
+            commands.entity(root_id).insert(StackPhysics);
+        }
+
+        root_id
     }
-
-    root_id
 }
 
 /// Generates a semi-random z position for a stack, based on either the entity id of the stack
@@ -170,12 +169,8 @@ pub fn get_semi_random_stack_root_z(entity: Entity) -> f32 {
 /// Applies via commands, so effects are only visible next frame.
 pub fn set_stack_card_transforms(commands: &mut Commands, stack: &[Entity]) {
     for (i, &card) in stack.iter().enumerate() {
-        commands.entity(card).insert(Transform::from_xyz(
-            0.,
-            -CARD_STACK_Y_SPACING * i as f32,
-            // Leave Z spacing for card overlays and such.
-            // TODO (Wybe 2022-05-24): Is there a better way than just arbitrarily keeping a certain space?
-            DELTA_Z * i as f32 * 2.,
+        commands.entity(card).insert(Transform::from_translation(
+            relative_center_of_nth_card_in_stack(i),
         ));
     }
 }
@@ -219,7 +214,8 @@ pub fn delete_card(
     commands.entity(card_to_delete).despawn_recursive();
 }
 
-pub fn center_of_top_card(
+/// Returns the global transform which indicates the center of the top card of a stack.
+pub fn global_center_of_top_card(
     root_transform: &GlobalTransform,
     amount_of_cards: usize,
 ) -> GlobalTransform {
@@ -229,6 +225,18 @@ pub fn center_of_top_card(
                 * root_transform.scale
                 * CARD_STACK_Y_SPACING
                 * amount_of_cards as f32,
+    )
+}
+
+/// Does not need to keep rotation or scaling in mind, because that is applied to the stack root.
+/// And the card positions are relative, so any scaling is auto-applied to them.
+pub fn relative_center_of_nth_card_in_stack(nth_card: usize) -> Vec3 {
+    // Leave Z spacing for card overlays and such.
+    // TODO (Wybe 2022-05-24): Is there a better way than just arbitrarily keeping a certain space?
+    Vec3::new(
+        0.,
+        -CARD_STACK_Y_SPACING * nth_card as f32,
+        DELTA_Z * nth_card as f32 * 2.,
     )
 }
 
@@ -309,7 +317,7 @@ pub fn split_stack(
             .remove_children(top_stack);
 
         // Create the new top stack root.
-        let new_root_id = spawn_stack_root(commands, Vec2::ZERO, top_stack, false);
+        let new_root_id = StackCreation::spawn_stack_root(commands, Vec2::ZERO, top_stack, false);
         // We explicitly set the transform here, because the default stack spawner will randomize
         // the Z height. Instead, we want it to be right where the hovered card was.
         commands

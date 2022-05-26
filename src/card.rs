@@ -1,8 +1,8 @@
 use crate::card_types::{CardCategory, CardType, TREE, WORKER};
 use crate::recipe::OngoingRecipe;
 use crate::stack_utils::{
-    center_of_top_card, get_semi_random_stack_root_z, merge_stacks, StackCreation,
-    CARD_STACK_Y_SPACING, STACK_ROOT_Z_RANGE,
+    get_semi_random_stack_root_z, global_center_of_top_card, merge_stacks,
+    relative_center_of_nth_card_in_stack, StackCreation, CARD_STACK_Y_SPACING, STACK_ROOT_Z_RANGE,
 };
 use crate::GameState;
 use bevy::math::{const_vec2, const_vec3};
@@ -54,6 +54,7 @@ impl Plugin for CardPlugin {
             .add_system_set(
                 SystemSet::on_update(GameState::Run)
                     .with_system(stack_mouse_drag_system)
+                    .with_system(stack_drop_target_visuals_system)
                     .with_system(card_mouse_pickup_system)
                     .with_system(stack_mouse_drop_system)
                     .with_system(card_hover_system)
@@ -74,6 +75,8 @@ pub struct CardImages {
     pub border: Handle<Image>,
     #[asset(path = "vector_images/card_hover_overlay.png")]
     pub hover_overlay: Handle<Image>,
+    #[asset(path = "vector_images/stack_drop_target.png")]
+    pub stack_drop_target: Handle<Image>,
 }
 
 #[derive(AssetCollection)]
@@ -127,6 +130,10 @@ pub struct CardStack(pub Vec<Entity>);
 /// Marks an entity that shows a card is being hovered.
 #[derive(Component)]
 pub struct IsCardHoverOverlay;
+
+/// Marks an entity that sits above a card, to indicate a stack can be dropped there.
+#[derive(Component)]
+pub struct IsDropTargetOverlay;
 
 #[derive(Component, Deref, DerefMut)]
 pub struct StackRelativeDragPosition(Vec2);
@@ -275,6 +282,42 @@ pub fn card_mouse_pickup_system(
     }
 }
 
+/// Shows where stacks can be dropped, when a stack is being dragged.
+pub fn stack_drop_target_visuals_system(
+    mut commands: Commands,
+    dragged_stack_query: Query<Entity, With<StackRelativeDragPosition>>,
+    other_stack_query: Query<(Entity, &CardStack), Without<StackRelativeDragPosition>>,
+    drop_target_overlay_query: Query<(Entity, &Parent), With<IsDropTargetOverlay>>,
+    card_images: Res<CardImages>,
+) {
+    if !dragged_stack_query.is_empty() {
+        if drop_target_overlay_query.is_empty() {
+            // Drag just started. Spawn in all overlays
+            for (root, stack) in other_stack_query.iter() {
+                commands.entity(root).with_children(|parent| {
+                    parent
+                        .spawn_bundle(SpriteBundle {
+                            texture: card_images.stack_drop_target.clone(),
+                            transform: Transform::from_translation(
+                                relative_center_of_nth_card_in_stack(stack.len() - 1),
+                            ),
+                            ..default()
+                        })
+                        .insert(IsDropTargetOverlay);
+                });
+            }
+        } else {
+            // Drag ongoing. Update changed stacks.
+            // TODO (Wybe 2022-05-26): Make sure that when a stack changes / is created, it is re-evaluated as drop target.
+        }
+    } else {
+        // Nothing is being dragged. Delete the overlays.
+        for (overlay, _) in drop_target_overlay_query.iter() {
+            commands.entity(overlay).despawn();
+        }
+    }
+}
+
 pub fn card_hover_system(
     mut commands: Commands,
     maybe_mouse_world_pos: Res<MouseWorldPos>,
@@ -386,8 +429,10 @@ pub fn dropped_stack_merging_system(
                 continue;
             }
 
-            let center_of_top_card =
-                crate::stack_utils::center_of_top_card(stack_global_transform, target_stack.len());
+            let center_of_top_card = crate::stack_utils::global_center_of_top_card(
+                stack_global_transform,
+                target_stack.len(),
+            );
 
             // TODO (Wybe 2022-05-24): Also take into account rotating and scaling.
             if in_bounds(
@@ -506,7 +551,7 @@ pub fn stack_move_to_target_system(
         {
             // TODO (Wybe 2022-05-25): Set the stacks Z position so it is on top of all other stacks. but below the dragged stacks
             let target_pos =
-                center_of_top_card(target_global_transform, target_stack.len()).translation;
+                global_center_of_top_card(target_global_transform, target_stack.len()).translation;
 
             let total_movement = target_pos.truncate() - global_transform.translation.truncate();
 
@@ -592,7 +637,7 @@ pub fn find_stack_movement_target_system(
 
         // TODO (Wybe 2022-05-25): Clean up so it isn't so nested.
         for (target_root, target_global, target_stack) in potential_target_stack_query.iter() {
-            let top_card_transform = center_of_top_card(target_global, target_stack.len());
+            let top_card_transform = global_center_of_top_card(target_global, target_stack.len());
 
             if (global_transform.translation.truncate() - top_card_transform.translation.truncate())
                 .length()
