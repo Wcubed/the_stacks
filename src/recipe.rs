@@ -169,12 +169,12 @@ impl Plugin for RecipePlugin {
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
-pub struct RecipeId(&'static str);
+pub struct RecipeId(pub(crate) &'static str);
 
 #[derive(Component, Clone)]
 pub struct OngoingRecipe {
-    id: RecipeId,
-    timer: Timer,
+    pub id: RecipeId,
+    pub timer: Timer,
 }
 
 /// Component indicating a progress bar hovering over a currently ongoing recipe.
