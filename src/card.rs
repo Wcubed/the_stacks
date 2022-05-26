@@ -286,29 +286,49 @@ pub fn card_mouse_pickup_system(
 pub fn stack_drop_target_visuals_system(
     mut commands: Commands,
     dragged_stack_query: Query<Entity, With<StackRelativeDragPosition>>,
-    other_stack_query: Query<(Entity, &CardStack), Without<StackRelativeDragPosition>>,
+    potential_target_stacks_query: Query<
+        (Entity, &CardStack, ChangeTrackers<CardStack>),
+        Without<StackRelativeDragPosition>,
+    >,
     drop_target_overlay_query: Query<(Entity, &Parent), With<IsDropTargetOverlay>>,
     card_images: Res<CardImages>,
 ) {
     if !dragged_stack_query.is_empty() {
         if drop_target_overlay_query.is_empty() {
             // Drag just started. Spawn in all overlays
-            for (root, stack) in other_stack_query.iter() {
-                commands.entity(root).with_children(|parent| {
-                    parent
-                        .spawn_bundle(SpriteBundle {
-                            texture: card_images.stack_drop_target.clone(),
-                            transform: Transform::from_translation(
-                                relative_center_of_nth_card_in_stack(stack.len() - 1),
-                            ),
-                            ..default()
-                        })
-                        .insert(IsDropTargetOverlay);
-                });
+            for (root, stack, _) in potential_target_stacks_query.iter() {
+                spawn_stack_drop_overlay(
+                    &mut commands,
+                    root,
+                    card_images.stack_drop_target.clone(),
+                    stack.len(),
+                );
             }
         } else {
             // Drag ongoing. Update changed stacks.
-            // TODO (Wybe 2022-05-26): Make sure that when a stack changes / is created, it is re-evaluated as drop target.
+            for (root, stack, changed) in potential_target_stacks_query.iter() {
+                if !changed.is_changed() {
+                    continue;
+                }
+
+                let maybe_overlay = drop_target_overlay_query
+                    .iter()
+                    .find(|(_, &parent)| parent.0 == root)
+                    .map(|(e, _)| e);
+
+                if let Some(overlay) = maybe_overlay {
+                    commands.entity(overlay).insert(Transform::from_translation(
+                        relative_center_of_nth_card_in_stack(stack.len() - 1),
+                    ));
+                } else {
+                    spawn_stack_drop_overlay(
+                        &mut commands,
+                        root,
+                        card_images.stack_drop_target.clone(),
+                        stack.len(),
+                    );
+                }
+            }
         }
     } else {
         // Nothing is being dragged. Delete the overlays.
@@ -316,6 +336,25 @@ pub fn stack_drop_target_visuals_system(
             commands.entity(overlay).despawn();
         }
     }
+}
+
+fn spawn_stack_drop_overlay(
+    commands: &mut Commands,
+    stack_root: Entity,
+    overlay_image: Handle<Image>,
+    amount_of_cards_in_stack: usize,
+) {
+    commands.entity(stack_root).with_children(|parent| {
+        parent
+            .spawn_bundle(SpriteBundle {
+                texture: overlay_image,
+                transform: Transform::from_translation(relative_center_of_nth_card_in_stack(
+                    amount_of_cards_in_stack - 1,
+                )),
+                ..default()
+            })
+            .insert(IsDropTargetOverlay);
+    });
 }
 
 pub fn card_hover_system(
