@@ -24,6 +24,17 @@ impl CardCategory {
             CardCategory::Valuable => Color::YELLOW,
         }
     }
+
+    /// Gets the color which has the most contrast with the background color.
+    pub fn text_color(&self) -> Color {
+        let back = self.background_color();
+        // Factors based on how strong the human eye perceives each color.
+        if back.r() * 0.299 + back.g() * 0.587 + back.b() * 0.114 > 0.729 {
+            Color::BLACK
+        } else {
+            Color::WHITE
+        }
+    }
 }
 
 pub struct CardType {

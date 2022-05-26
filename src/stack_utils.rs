@@ -18,7 +18,7 @@ pub const CARD_STACK_Y_SPACING: f32 = 50.0;
 pub const STACK_ROOT_Z_RANGE: Range<f32> = 1.0..100.0;
 
 const CARD_HOVER_OVERLAY_COLOR: Color = Color::rgba(1., 1., 1., 0.1);
-const CARD_FOREGROUND_COLOR: Color = Color::rgb(0.8, 0.8, 0.8);
+const CARD_BORDER_COLOR: Color = Color::BLACK;
 
 const CARD_VALUE_SPACING_FROM_CARD_EDGE: f32 = 10.0;
 
@@ -27,7 +27,7 @@ pub struct StackCreation {
     background: Handle<Image>,
     border: Handle<Image>,
     hover_overlay: Handle<Image>,
-    title_style: TextStyle,
+    title_font: Handle<Font>,
     title_transform: Transform,
     card_value_transform: Transform,
 }
@@ -38,11 +38,7 @@ impl StackCreation {
             background: images.background.clone(),
             border: images.border.clone(),
             hover_overlay: images.hover_overlay.clone(),
-            title_style: TextStyle {
-                font: fonts.title.clone(),
-                font_size: CARD_STACK_Y_SPACING,
-                color: CARD_FOREGROUND_COLOR,
-            },
+            title_font: fonts.title.clone(),
             title_transform: Transform::from_xyz(
                 0.,
                 0.5 * (visual_size.y - CARD_STACK_Y_SPACING),
@@ -80,6 +76,8 @@ impl StackCreation {
 
     /// Spawns a loose card. The new card should be added to a stack straight away.
     fn spawn_card(&self, commands: &mut Commands, card: &CardType) -> Entity {
+        let foreground_color = card.category.text_color();
+
         let entity = commands
             .spawn_bundle(SpriteBundle {
                 texture: self.background.clone(),
@@ -96,7 +94,7 @@ impl StackCreation {
                     texture: self.border.clone(),
                     transform: Transform::from_xyz(0.0, 0.0, DELTA_Z),
                     sprite: Sprite {
-                        color: CARD_FOREGROUND_COLOR,
+                        color: CARD_BORDER_COLOR,
                         ..default()
                     },
                     ..default()
@@ -105,7 +103,11 @@ impl StackCreation {
                 parent.spawn_bundle(Text2dBundle {
                     text: Text::with_section(
                         card.title,
-                        self.title_style.clone(),
+                        TextStyle {
+                            font: self.title_font.clone(),
+                            font_size: CARD_STACK_Y_SPACING,
+                            color: foreground_color,
+                        },
                         TextAlignment {
                             vertical: VerticalAlign::Center,
                             horizontal: HorizontalAlign::Center,
@@ -133,7 +135,11 @@ impl StackCreation {
                     parent.spawn_bundle(Text2dBundle {
                         text: Text::with_section(
                             value.to_string(),
-                            self.title_style.clone(),
+                            TextStyle {
+                                font: self.title_font.clone(),
+                                font_size: CARD_STACK_Y_SPACING,
+                                color: foreground_color,
+                            },
                             TextAlignment {
                                 vertical: VerticalAlign::Bottom,
                                 horizontal: HorizontalAlign::Left,

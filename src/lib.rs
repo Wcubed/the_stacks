@@ -20,7 +20,7 @@ pub struct TheStacksPlugin;
 impl Plugin for TheStacksPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(Msaa { samples: 4 })
-            .insert_resource(ClearColor(Color::BLACK))
+            .insert_resource(ClearColor(Color::rgb(0.0, 0.1, 0.0)))
             .add_state(GameState::AssetLoading)
             .add_plugin(CardPlugin)
             .add_plugin(RecipePlugin)
