@@ -686,15 +686,13 @@ pub fn find_stack_movement_target_system(
     let search_radius_range = card_visual_size.length() * card_cross_sections_max_search_radius;
 
     for (root, global_transform, stack) in lost_stack_query.iter() {
-        // Stacks want to auto-stack if they are of the same category.
-        // But that requires the stack looking for a position, to have all the same category in the
-        // first place.
+        // Stacks want to auto-stack if the top card on the target stack is of the same type.
         // TODO (Wybe 2022-05-25): Prevent recipes from automatically forming.
         // TODO (Wybe 2022-05-25): don't unwrap here.
-        let category = cards.get(stack[0]).unwrap().category;
+        let wanted_top_card = cards.get(stack[0]).unwrap();
         if stack.iter().map(|&e| cards.get(e)).any(|maybe_card| {
             if let Ok(card) = maybe_card {
-                card.category != category
+                card != wanted_top_card
             } else {
                 false
             }
@@ -718,20 +716,8 @@ pub fn find_stack_movement_target_system(
                 .length()
                 < search_radius_range
             {
-                // Top card in range. Check if stack is of the same category.
-                // TODO (Wybe 2022-05-25): If this is a stack with a single type of card (title & category), prefer the target stack with the most of this type of card.
-                // TODO (Wybe 2022-05-25): Refactor this conditional
-                if !target_stack
-                    .iter()
-                    .map(|&e| cards.get(e))
-                    .any(|maybe_card| {
-                        if let Ok(card) = maybe_card {
-                            card.category != category
-                        } else {
-                            false
-                        }
-                    })
-                {
+                // Top card in range. Check if it is the same as the cards in the seeking stack.
+                if cards.get(*target_stack.last().unwrap()).unwrap() == wanted_top_card {
                     // Can auto-stack with this target stack.
                     commands
                         .entity(root)
