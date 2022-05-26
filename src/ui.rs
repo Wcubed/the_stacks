@@ -15,8 +15,7 @@ fn card_info_ui(
     mut context: ResMut<EguiContext>,
     hovered_card_query: Query<&Card, With<HoveredCard>>,
 ) {
-    // TODO (Wybe 2022-05-26): For some reason this fixed size is not applied.
-    let info_window_size = egui::Vec2::new(200.0, 200.0);
+    let info_window_size = egui::Vec2::new(200.0, 100.0);
     let info_window_offset = egui::Vec2::new(10.0, -10.0);
 
     if let Some(hovered_card) = hovered_card_query.iter().next() {
@@ -27,6 +26,12 @@ fn card_info_ui(
             .collapsible(false)
             .show(context.ctx_mut(), |ui| {
                 ui.label(hovered_card.description);
+
+                if hovered_card.value.is_none() {
+                    ui.label("Cannot be sold.");
+                }
+
+                ui.allocate_space(ui.available_size())
             });
     }
 }

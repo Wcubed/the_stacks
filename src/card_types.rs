@@ -98,7 +98,7 @@ pub(crate) const WORKER: CardType = CardType {
     title: "Villager",
     value: None,
     category: CardCategory::Worker,
-    description: "A strong worker",
+    description: "A strong worker.",
     on_spawn: None,
 };
 
