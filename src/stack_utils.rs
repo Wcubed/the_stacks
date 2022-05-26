@@ -20,6 +20,8 @@ pub const STACK_ROOT_Z_RANGE: Range<f32> = 1.0..100.0;
 const CARD_HOVER_OVERLAY_COLOR: Color = Color::rgba(1., 1., 1., 0.1);
 const CARD_FOREGROUND_COLOR: Color = Color::rgb(0.8, 0.8, 0.8);
 
+const CARD_VALUE_SPACING_FROM_CARD_EDGE: f32 = 10.0;
+
 /// Resource that contains everything needed to create new cards.
 pub struct StackCreation {
     background: Handle<Image>,
@@ -27,6 +29,7 @@ pub struct StackCreation {
     hover_overlay: Handle<Image>,
     title_style: TextStyle,
     title_transform: Transform,
+    card_value_transform: Transform,
 }
 
 impl StackCreation {
@@ -43,6 +46,11 @@ impl StackCreation {
             title_transform: Transform::from_xyz(
                 0.,
                 0.5 * (visual_size.y - CARD_STACK_Y_SPACING),
+                DELTA_Z,
+            ),
+            card_value_transform: Transform::from_xyz(
+                -0.5 * visual_size.x + CARD_VALUE_SPACING_FROM_CARD_EDGE,
+                -0.5 * visual_size.y + CARD_VALUE_SPACING_FROM_CARD_EDGE,
                 DELTA_Z,
             ),
         }
@@ -119,6 +127,22 @@ impl StackCreation {
                         ..default()
                     })
                     .insert(IsCardHoverOverlay);
+
+                // Card coin value
+                if let Some(value) = card.value {
+                    parent.spawn_bundle(Text2dBundle {
+                        text: Text::with_section(
+                            value.to_string(),
+                            self.title_style.clone(),
+                            TextAlignment {
+                                vertical: VerticalAlign::Bottom,
+                                horizontal: HorizontalAlign::Left,
+                            },
+                        ),
+                        transform: self.card_value_transform,
+                        ..default()
+                    });
+                }
             })
             .id();
 
