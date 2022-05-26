@@ -1,8 +1,8 @@
 use crate::card::{Card, CardStack, CardVisualSize, STACK_DRAG_Z};
 use crate::card_types::CardCategory::Worker;
-use crate::card_types::{APPLE, COIN, LOG, MARKET, PLANK, TREE};
-use crate::stack_utils::{delete_card, StackCreation};
-use crate::{card_types, GameState};
+use crate::card_types::{COIN, LOG, MARKET, PLANK, TREE};
+use crate::stack_utils::{delete_cards, StackCreation};
+use crate::GameState;
 use bevy::ecs::event::Events;
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet};
@@ -56,7 +56,7 @@ impl Plugin for RecipePlugin {
                                 if card.is_type(TREE) {
                                     // The recipe consumes 1 use of a tree.
                                     if uses.0 == 1 {
-                                        delete_card(&mut commands, card_entity, root, stack);
+                                        delete_cards(&mut commands, &[card_entity], root, stack);
                                     } else {
                                         uses.0 -= 1;
                                     }
@@ -95,7 +95,7 @@ impl Plugin for RecipePlugin {
                             if let Ok(card) = card_query.get(card_entity) {
                                 if card.is_type(LOG) {
                                     // The recipe consumes a single log.
-                                    delete_card(&mut commands, card_entity, root, stack);
+                                    delete_cards(&mut commands, &[card_entity], root, stack);
 
                                     creation.spawn_stack(
                                         &mut commands,
@@ -115,8 +115,7 @@ impl Plugin for RecipePlugin {
                 "Sell",
                 0.1,
                 |cards| {
-                    // Bottom card is a market.
-                    // TODO (Wybe 2022-05-26): Check if there are sellable cards
+                    // Bottom card is a market, and there are sellable cards.
                     cards.first().filter(|c| c.is_type(MARKET)).is_some()
                         && cards.iter().any(|c| c.value.is_some())
                 },
@@ -127,26 +126,38 @@ impl Plugin for RecipePlugin {
                 >,
                  card_query: Query<&Card>,
                  creation: Res<StackCreation>| {
-                    // TODO (Wybe 2022-05-26): Only sell sellable cards.
                     for (root, stack, global_transform) in recipe_stack_query.iter() {
-                        for &card_entity in stack.iter() {
-                            if let Ok(card) = card_query.get(card_entity) {
-                                // The recipe consumes a single card with a value.
-                                if let Some(value) = card.value {
-                                    delete_card(&mut commands, card_entity, root, stack);
+                        let mut total_value = 0;
 
-                                    if value > 0 {
-                                        creation.spawn_stack(
-                                            &mut commands,
-                                            global_transform.translation.truncate(),
-                                            COIN,
-                                            value,
-                                            true,
-                                        );
+                        // The recipe consumes all the cards that have a value.
+                        let cards_with_value: Vec<Entity> = stack
+                            .iter()
+                            .filter_map(|&entity| {
+                                if let Ok(card) = card_query.get(entity) {
+                                    if let Some(value) = card.value {
+                                        total_value += value;
+                                        Some(entity)
+                                    } else {
+                                        None
                                     }
-                                    break;
+                                } else {
+                                    None
                                 }
-                            }
+                            })
+                            .collect();
+
+                        if !cards_with_value.is_empty() {
+                            delete_cards(&mut commands, &cards_with_value, root, stack);
+                        }
+
+                        if total_value > 0 {
+                            creation.spawn_stack(
+                                &mut commands,
+                                global_transform.translation.truncate(),
+                                COIN,
+                                total_value,
+                                true,
+                            );
                         }
                     }
                 },

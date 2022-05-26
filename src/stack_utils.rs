@@ -214,9 +214,13 @@ pub fn stack_visual_size(single_card_visual_size: Vec2, cards_in_stack: usize) -
 /// It does not matter if this card is in the middle of a stack,
 /// or the only card in a stack. This function will handle it gracefully.
 /// The effects are applied via [Commands].
-pub fn delete_card(
+///
+/// Do not call this multiple times on the same stack, if the `commands` have not been applied
+/// in-between calls. Otherwise the re-positioning of the cards will panic, because the
+/// `Transform` is to be added to a card that was removed.
+pub fn delete_cards(
     commands: &mut Commands,
-    card_to_delete: Entity,
+    cards_to_delete: &[Entity],
     stack_root: Entity,
     stack: &[Entity],
 ) {
@@ -224,7 +228,7 @@ pub fn delete_card(
     //      the whole stack's Vec every time a card is deleted. but this works for now.
     //      (don't do pre-mature optimizations and all that).
 
-    if stack[0] == card_to_delete && stack.len() == 1 {
+    if stack[0] == cards_to_delete[0] && stack.len() == 1 && cards_to_delete.len() == 1 {
         // Last card in the stack. Delete the stack as well.
         commands.entity(stack_root).despawn_recursive();
     } else {
@@ -232,14 +236,16 @@ pub fn delete_card(
             stack
                 .iter()
                 .copied()
-                .filter(|&e| e != card_to_delete)
+                .filter(|e| !cards_to_delete.contains(e))
                 .collect(),
         );
         set_stack_card_transforms(commands, &new_stack.0);
         commands.entity(stack_root).insert(new_stack);
     }
 
-    commands.entity(card_to_delete).despawn_recursive();
+    for &card in cards_to_delete.iter() {
+        commands.entity(card).despawn_recursive();
+    }
 }
 
 /// Returns the global transform which indicates the center of the top card of a stack.
