@@ -1,5 +1,5 @@
 use crate::card::{
-    CardFonts, CardImages, CardStack, IsCardHoverOverlay, StackLookingForTargetLocation,
+    CardFonts, CardImages, CardStack, IsCardHoverOverlay, StackLookingForMovementTarget,
     StackPhysics, DELTA_Z,
 };
 use crate::card_types::CardType;
@@ -147,7 +147,7 @@ fn spawn_stack_root(
     if move_to_empty_space {
         commands
             .entity(root_id)
-            .insert(StackLookingForTargetLocation);
+            .insert(StackLookingForMovementTarget);
     } else {
         commands.entity(root_id).insert(StackPhysics);
     }

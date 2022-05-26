@@ -14,6 +14,8 @@ use std::collections::HashSet;
 /// Dragged cards have a z value that is higher than the cards that are still on the "floor".
 /// This way, they will never be overlapped by cards that they should logically be floating above.
 pub const STACK_DRAG_Z: f32 = STACK_ROOT_Z_RANGE.end + 100.0;
+/// Stacks that move on their own are above everything else, but below stacks dragged by the user.
+const STACK_AUTO_MOVE_Z: f32 = STACK_DRAG_Z - 10.0;
 
 /// Extra scaling a stack gets when a user "picks it up".
 /// This should help in giving the illusion of the stack being above the other stacks.
@@ -26,6 +28,10 @@ const STACK_OVERLAP_SPACING: Vec2 = const_vec2!([10.0, 10.0]);
 
 /// Tiny change in Z position, used to put sprites "in front" of other sprites.
 pub const DELTA_Z: f32 = 0.001;
+
+/// Stack movement speed in units per second.
+/// Used when a stack is moving on it's own.
+const STACK_AUTO_MOVEMENT_SPEED: f32 = 2000.0;
 
 pub struct CardPlugin;
 
@@ -54,7 +60,8 @@ impl Plugin for CardPlugin {
                     .with_system(hover_drag_cursor_system)
                     .with_system(stack_overlap_nudging_system)
                     .with_system(dropped_stack_merging_system)
-                    .with_system(find_stack_movement_target_system),
+                    .with_system(find_stack_movement_target_system)
+                    .with_system(stack_move_to_target_system),
             );
     }
 }
@@ -101,7 +108,13 @@ pub struct StackPhysics;
 /// Marks a stack that wants to find a nice place to move to.
 /// [find_stack_movement_target_system] handles these stacks.
 #[derive(Component)]
-pub struct StackLookingForTargetLocation;
+pub struct StackLookingForMovementTarget;
+
+/// Marks a stack that is moving on it's own towards a target other stack.
+/// The goal of a stack moving towards another stack is to combine with that stack.
+/// TODO (Wybe 2022-05-25): allow moving towards a fixed location.
+#[derive(Component)]
+pub struct MovingStackTarget(Entity);
 
 /// Indicates this is the root entity of a stack of cards.
 /// Contains all cards, in-order.
@@ -464,17 +477,87 @@ pub fn stack_overlap_nudging_system(
     }
 }
 
+pub fn stack_move_to_target_system(
+    mut commands: Commands,
+    mut stacks_with_target: Query<(
+        Entity,
+        &GlobalTransform,
+        &mut Transform,
+        &CardStack,
+        &MovingStackTarget,
+        Option<&OngoingRecipe>,
+    )>,
+    all_stacks: Query<(Entity, &GlobalTransform, &CardStack, Option<&OngoingRecipe>)>,
+    time: Res<Time>,
+) {
+    for (
+        root,
+        global_transform,
+        mut transform,
+        stack,
+        &MovingStackTarget(movement_target),
+        maybe_recipe,
+    ) in stacks_with_target.iter_mut()
+    {
+        // TODO (Wybe 2022-05-25): Remove targeting when a stack is targeting itself.
+
+        if let Ok((target_root, target_global_transform, target_stack, maybe_target_recipe)) =
+            all_stacks.get(movement_target)
+        {
+            // TODO (Wybe 2022-05-25): Set the stacks Z position so it is on top of all other stacks. but below the dragged stacks
+            let target_pos =
+                center_of_top_card(target_global_transform, target_stack.len()).translation;
+
+            let total_movement = target_pos.truncate() - global_transform.translation.truncate();
+
+            let movement_this_frame =
+                total_movement.normalize() * STACK_AUTO_MOVEMENT_SPEED * time.delta_seconds();
+
+            if total_movement.length() == 0.
+                || movement_this_frame.length() >= total_movement.length()
+            {
+                // Target will be reached in this frame. Snap to it.
+                // Don't need to remove the movement target, because the source stack won't exist
+                // after this frame.
+                merge_stacks(
+                    &mut commands,
+                    root,
+                    stack,
+                    maybe_recipe,
+                    target_root,
+                    target_stack,
+                    maybe_target_recipe,
+                );
+            } else {
+                transform.translation += movement_this_frame.extend(0.);
+                transform.translation.z = STACK_AUTO_MOVE_Z;
+            }
+        } else {
+            println!("?");
+            // Target does not exist.
+            remove_movement_target(&mut commands, root);
+        }
+    }
+}
+
+fn remove_movement_target(commands: &mut Commands, stack_root: Entity) {
+    commands
+        .entity(stack_root)
+        .remove::<MovingStackTarget>()
+        .insert(StackPhysics);
+}
+
 /// Handles stacks marked with [StackLookingForTargetLocation] (and removes the mark).
 /// Finds either an open space, or another stack that this one can combine with.
 pub fn find_stack_movement_target_system(
     mut commands: Commands,
     lost_stack_query: Query<
-        (Entity, &GlobalTransform, &CardStack, Option<&OngoingRecipe>),
-        With<StackLookingForTargetLocation>,
+        (Entity, &GlobalTransform, &CardStack),
+        With<StackLookingForMovementTarget>,
     >,
     potential_target_stack_query: Query<
-        (Entity, &GlobalTransform, &CardStack, Option<&OngoingRecipe>),
-        Without<StackLookingForTargetLocation>,
+        (Entity, &GlobalTransform, &CardStack),
+        Without<StackLookingForMovementTarget>,
     >,
     cards: Query<&Card>,
     card_visual_size: Res<CardVisualSize>,
@@ -482,7 +565,7 @@ pub fn find_stack_movement_target_system(
     let card_cross_sections_max_search_radius = 2.;
     let search_radius_range = card_visual_size.length() * card_cross_sections_max_search_radius;
 
-    for (root, global_transform, stack, maybe_recipe) in lost_stack_query.iter() {
+    for (root, global_transform, stack) in lost_stack_query.iter() {
         // Stacks want to auto-stack if they are of the same category.
         // But that requires the stack looking for a position, to have all the same category in the
         // first place.
@@ -500,7 +583,7 @@ pub fn find_stack_movement_target_system(
             // Therefore we can't auto stack.
             commands
                 .entity(root)
-                .remove::<StackLookingForTargetLocation>()
+                .remove::<StackLookingForMovementTarget>()
                 .insert(StackPhysics);
             break;
         }
@@ -508,9 +591,7 @@ pub fn find_stack_movement_target_system(
         let mut target_found = false;
 
         // TODO (Wybe 2022-05-25): Clean up so it isn't so nested.
-        for (target_root, target_global, target_stack, maybe_target_recipe) in
-            potential_target_stack_query.iter()
-        {
+        for (target_root, target_global, target_stack) in potential_target_stack_query.iter() {
             let top_card_transform = center_of_top_card(target_global, target_stack.len());
 
             if (global_transform.translation.truncate() - top_card_transform.translation.truncate())
@@ -518,6 +599,7 @@ pub fn find_stack_movement_target_system(
                 < search_radius_range
             {
                 // Top card in range. Check if stack is of the same category.
+                // TODO (Wybe 2022-05-25): If this is a stack with a single type of card (title & category), prefer the target stack with the most of this type of card.
                 // TODO (Wybe 2022-05-25): Refactor this conditional
                 if !target_stack
                     .iter()
@@ -531,15 +613,10 @@ pub fn find_stack_movement_target_system(
                     })
                 {
                     // Can auto-stack with this target stack.
-                    merge_stacks(
-                        &mut commands,
-                        root,
-                        stack,
-                        maybe_recipe,
-                        target_root,
-                        target_stack,
-                        maybe_target_recipe,
-                    );
+                    commands
+                        .entity(root)
+                        .remove::<StackLookingForMovementTarget>()
+                        .insert(MovingStackTarget(target_root));
                     target_found = true;
                     break;
                 }
@@ -549,7 +626,7 @@ pub fn find_stack_movement_target_system(
         if !target_found {
             commands
                 .entity(root)
-                .remove::<StackLookingForTargetLocation>()
+                .remove::<StackLookingForMovementTarget>()
                 .insert(StackPhysics);
         }
     }
