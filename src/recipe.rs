@@ -1,4 +1,4 @@
-use crate::card::{Card, CardStack, CardVisualSize, STACK_DRAG_Z};
+use crate::card::{Card, CardStack, CardVisualSize, DELTA_Z, STACK_DRAG_Z};
 use crate::recipe_defines::build_recipes;
 use crate::{is_time_running, GameState, TimeSpeed};
 use bevy::ecs::event::Events;
@@ -13,7 +13,8 @@ use std::time::Duration;
 const RECIPE_PROGRESS_BAR_Z: f32 = STACK_DRAG_Z - 10.;
 
 const RECIPE_PROGRESS_BAR_HEIGHT: f32 = 20.;
-const RECIPE_PROGRESS_BAR_COLOR: Color = Color::WHITE;
+const RECIPE_PROGRESS_BAR_FOREGROUND: Color = Color::WHITE;
+const RECIPE_PROGRESS_BAR_BACKGROUND: Color = Color::rgb(0.1, 0.1, 0.1);
 
 /// Handles recipes on card stacks
 /// Requires [CardPlugin].
@@ -51,6 +52,10 @@ pub struct OngoingRecipe {
 /// Component indicating a progress bar hovering over a currently ongoing recipe.
 #[derive(Component)]
 pub struct RecipeProgressBar;
+
+/// Component indicating the background of a progress bar hovering over a currently ongoing recipe.
+#[derive(Component)]
+pub struct RecipeProgressBarBackground;
 
 /// Component that marks a stack with a recipe ready to be finished.
 /// This is read by [recipe_finished_exclusive_system], which will finish the recipe.
@@ -216,21 +221,23 @@ pub fn recipe_timer_graphics_system(
         (Entity, &Parent, &mut Sprite, &mut Transform),
         With<RecipeProgressBar>,
     >,
+    mut recipe_progress_bar_backgrounds: Query<
+        (Entity, &Parent),
+        With<RecipeProgressBarBackground>,
+    >,
     ongoing_recipes: Query<&OngoingRecipe, With<CardStack>>,
     stacks_with_new_recipes: Query<Entity, (With<CardStack>, Added<OngoingRecipe>)>,
     card_visual_size: Res<CardVisualSize>,
 ) {
     // Create new progress bars
     for root in stacks_with_new_recipes.iter() {
+        let bar_y_pos = card_visual_size.y * 0.5 + RECIPE_PROGRESS_BAR_HEIGHT;
+
         let progress_bar = commands
             .spawn_bundle(SpriteBundle {
-                transform: Transform::from_xyz(
-                    0.,
-                    card_visual_size.y * 0.5 + RECIPE_PROGRESS_BAR_HEIGHT,
-                    RECIPE_PROGRESS_BAR_Z,
-                ),
+                transform: Transform::from_xyz(0., bar_y_pos, RECIPE_PROGRESS_BAR_Z),
                 sprite: Sprite {
-                    color: RECIPE_PROGRESS_BAR_COLOR,
+                    color: RECIPE_PROGRESS_BAR_FOREGROUND,
                     custom_size: Some(Vec2::new(0., RECIPE_PROGRESS_BAR_HEIGHT)),
                     ..default()
                 },
@@ -238,8 +245,23 @@ pub fn recipe_timer_graphics_system(
             })
             .insert(RecipeProgressBar)
             .id();
+        let progress_bar_background = commands
+            .spawn_bundle(SpriteBundle {
+                transform: Transform::from_xyz(0., bar_y_pos, RECIPE_PROGRESS_BAR_Z - DELTA_Z),
+                sprite: Sprite {
+                    color: RECIPE_PROGRESS_BAR_BACKGROUND,
+                    custom_size: Some(Vec2::new(card_visual_size.x, RECIPE_PROGRESS_BAR_HEIGHT)),
+                    ..default()
+                },
+                ..default()
+            })
+            .insert(RecipeProgressBarBackground)
+            .id();
 
-        commands.entity(root).add_child(progress_bar);
+        commands
+            .entity(root)
+            .add_child(progress_bar)
+            .add_child(progress_bar_background);
     }
 
     // Update existing progress bars
@@ -252,6 +274,14 @@ pub fn recipe_timer_graphics_system(
         } else {
             // Recipe no longer ongoing. Remove progress bar.
             commands.entity(entity).despawn_recursive();
+
+            // TODO (Wybe 2022-05-28): there is probably a better way, instead of searching.
+            if let Some((background, _)) = recipe_progress_bar_backgrounds
+                .iter()
+                .find(|(_, &parent)| parent == *root)
+            {
+                commands.entity(background).despawn_recursive();
+            }
         }
     }
 }

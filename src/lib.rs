@@ -27,7 +27,7 @@ pub struct TheStacksPlugin;
 impl Plugin for TheStacksPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(Msaa { samples: 4 })
-            .insert_resource(ClearColor(Color::rgb(0.0, 0.1, 0.0)))
+            .insert_resource(ClearColor(Color::rgb(0.1, 0.2, 0.1)))
             .insert_resource(TimeSpeed {
                 running: true,
                 speed: Speed::NORMAL,
