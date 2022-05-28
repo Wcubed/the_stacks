@@ -667,6 +667,7 @@ fn remove_movement_target(commands: &mut Commands, stack_root: Entity) {
 
 /// Handles stacks marked with [StackLookingForTargetLocation] (and removes the mark).
 /// Finds either an open space, or another stack that this one can combine with.
+/// Wont auto-combine with ongoing recipes.
 pub fn find_stack_movement_target_system(
     mut commands: Commands,
     lost_stack_query: Query<
@@ -678,6 +679,7 @@ pub fn find_stack_movement_target_system(
         (
             Without<StackLookingForMovementTarget>,
             Without<StackRelativeDragPosition>,
+            Without<OngoingRecipe>,
         ),
     >,
     cards: Query<&Card>,

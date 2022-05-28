@@ -134,7 +134,7 @@ impl StackCreation {
                 if let Some(value) = card.value {
                     parent.spawn_bundle(Text2dBundle {
                         text: Text::with_section(
-                            value.to_string(),
+                            format!("{} C", value),
                             TextStyle {
                                 font: self.title_font.clone(),
                                 font_size: CARD_STACK_Y_SPACING,
