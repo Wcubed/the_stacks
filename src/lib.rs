@@ -2,6 +2,7 @@ mod camera;
 mod card;
 mod card_types;
 mod recipe;
+mod recipe_defines;
 mod stack_utils;
 mod ui;
 
