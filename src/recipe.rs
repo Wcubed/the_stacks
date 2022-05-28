@@ -1,6 +1,6 @@
 use crate::card::{Card, CardStack, CardVisualSize, STACK_DRAG_Z};
 use crate::recipe_defines::build_recipes;
-use crate::{is_game_running, GameState};
+use crate::{is_time_running, GameState, TimeSpeed};
 use bevy::ecs::event::Events;
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet};
@@ -25,13 +25,13 @@ impl Plugin for RecipePlugin {
             .add_system_set(
                 SystemSet::on_update(GameState::Run)
                     .with_system(recipe_check_system)
-                    .with_system(recipe_timer_graphics_system),
+                    .with_system(recipe_timer_graphics_system)
+                    .with_system(recipe_finished_exclusive_system.exclusive_system().at_end()),
             )
             .add_system_set(
                 SystemSet::on_update(GameState::Run)
-                    .with_run_criteria(is_game_running)
-                    .with_system(recipe_timer_update_system)
-                    .with_system(recipe_finished_exclusive_system.exclusive_system().at_end()),
+                    .with_run_criteria(is_time_running)
+                    .with_system(recipe_timer_update_system),
             );
 
         let recipes = build_recipes(&mut app.world);
@@ -195,9 +195,11 @@ pub fn recipe_timer_update_system(
     mut commands: Commands,
     mut ongoing_recipes: Query<(Entity, &mut OngoingRecipe), With<CardStack>>,
     time: Res<Time>,
+    speed: Res<TimeSpeed>,
 ) {
     for (root, mut recipe) in ongoing_recipes.iter_mut() {
-        recipe.timer.tick(time.delta());
+        let progress = time.delta_seconds() * speed.speed_as_factor();
+        recipe.timer.tick(Duration::from_secs_f32(progress));
 
         if recipe.timer.finished() {
             commands

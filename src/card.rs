@@ -4,7 +4,7 @@ use crate::stack_utils::{
     get_semi_random_stack_root_z, global_center_of_top_card, merge_stacks,
     relative_center_of_nth_card_in_stack, StackCreation, CARD_STACK_Y_SPACING, STACK_ROOT_Z_RANGE,
 };
-use crate::{is_game_running, GameState};
+use crate::{is_time_running, GameState};
 use bevy::math::{const_vec2, const_vec3};
 use bevy::prelude::*;
 use bevy::render::camera::Camera2d;

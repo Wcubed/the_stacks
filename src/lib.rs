@@ -1,3 +1,6 @@
+#![forbid(unsafe_code)]
+#![warn(clippy::all, rust_2018_idioms)]
+
 mod camera;
 mod card;
 mod card_types;
@@ -25,9 +28,9 @@ impl Plugin for TheStacksPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(Msaa { samples: 4 })
             .insert_resource(ClearColor(Color::rgb(0.0, 0.1, 0.0)))
-            .insert_resource(GameSpeed {
+            .insert_resource(TimeSpeed {
                 running: true,
-                speed: 1.0,
+                speed: Speed::NORMAL,
             })
             .add_state(GameState::AssetLoading)
             .add_plugin(CardPlugin)
@@ -42,19 +45,36 @@ impl Plugin for TheStacksPlugin {
 
 /// There are separate `running` and `speed` fields so that the game can remember the desired speed
 /// while paused.
-pub struct GameSpeed {
+/// Influences things like the progress of crafting recipes.
+pub struct TimeSpeed {
     running: bool,
-    speed: f32,
+    speed: Speed,
 }
 
-fn game_speed_change_system(keys: Res<Input<KeyCode>>, mut speed: ResMut<GameSpeed>) {
+impl TimeSpeed {
+    /// Does not take into account being paused.
+    fn speed_as_factor(&self) -> f32 {
+        match self.speed {
+            Speed::NORMAL => 1.0,
+            Speed::DOUBLE => 2.0,
+        }
+    }
+}
+
+#[derive(Eq, PartialEq)]
+pub enum Speed {
+    NORMAL,
+    DOUBLE,
+}
+
+fn game_speed_change_system(keys: Res<Input<KeyCode>>, mut speed: ResMut<TimeSpeed>) {
     if keys.just_pressed(KeyCode::Space) {
         speed.running = !speed.running;
     }
 }
 
 /// Conditional that can be used in [SystemSet::with_run_criteria](bevy::prelude::SystemSet::with_run_criteria) statements.
-pub fn is_game_running(speed: Res<GameSpeed>) -> ShouldRun {
+pub fn is_time_running(speed: Res<TimeSpeed>) -> ShouldRun {
     if speed.running {
         ShouldRun::Yes
     } else {

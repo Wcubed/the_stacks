@@ -1,5 +1,6 @@
 use crate::card::{Card, CardStack, HoveredCard};
 use crate::recipe::{OngoingRecipe, Recipes};
+use crate::{Speed, TimeSpeed};
 use bevy::prelude::*;
 use bevy_egui::*;
 use bevy_egui::{EguiContext, EguiPlugin};
@@ -9,13 +10,16 @@ use bevy_egui::{EguiContext, EguiPlugin};
 /// TODO (Wybe 2022-05-26): Can we get this from egui?
 const TITLE_HEIGHT: f32 = 50.0;
 
+const OFFSETS: egui::Vec2 = egui::vec2(10.0, 10.0);
+
 const CARD_INFO_SIZE: egui::Vec2 = egui::vec2(200.0, 100.0);
-const CARD_INFO_WINDOW_OFFSET: egui::Vec2 = egui::vec2(10.0, -10.0);
+const CARD_INFO_WINDOW_OFFSET: egui::Vec2 = egui::vec2(OFFSETS.x, -OFFSETS.y);
 const RECIPE_INFO_SIZE: egui::Vec2 = egui::vec2(CARD_INFO_SIZE.x, 20.0);
 const RECIPE_INFO_WINDOW_OFFSET: egui::Vec2 = egui::vec2(
     CARD_INFO_WINDOW_OFFSET.x,
     -(CARD_INFO_SIZE.y + TITLE_HEIGHT) + CARD_INFO_WINDOW_OFFSET.y,
 );
+const GAME_SPEED_WINDOW_OFFSET: egui::Vec2 = egui::vec2(-OFFSETS.x, OFFSETS.y);
 
 pub struct UiPlugin;
 
@@ -23,7 +27,8 @@ impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugin(EguiPlugin)
             .add_system(card_info_ui)
-            .add_system(card_crafting_info_ui);
+            .add_system(card_crafting_info_ui)
+            .add_system(game_speed_ui);
     }
 }
 
@@ -53,7 +58,6 @@ fn card_crafting_info_ui(
     mut context: ResMut<EguiContext>,
     hovered_card_query: Query<&Parent, With<HoveredCard>>,
     stack_recipe_query: Query<&OngoingRecipe, With<CardStack>>,
-    recipes: Res<Recipes>,
 ) {
     if let Some(hovered_card) = hovered_card_query.iter().next() {
         if let Ok(recipe) = stack_recipe_query.get(hovered_card.0) {
@@ -72,4 +76,22 @@ fn card_crafting_info_ui(
                 });
         }
     }
+}
+
+fn game_speed_ui(mut context: ResMut<EguiContext>, mut speed: ResMut<TimeSpeed>) {
+    egui::Window::new("speed_window")
+        .title_bar(false)
+        .resizable(false)
+        .anchor(egui::Align2::RIGHT_TOP, GAME_SPEED_WINDOW_OFFSET)
+        .show(context.ctx_mut(), |ui| {
+            // TODO (Wybe 2022-05-28): Highlight active buttons.
+            ui.horizontal(|ui| {
+                let mut paused = !speed.running;
+                ui.toggle_value(&mut paused, "||");
+                speed.running = !paused;
+
+                ui.selectable_value(&mut speed.speed, Speed::NORMAL, ">");
+                ui.selectable_value(&mut speed.speed, Speed::DOUBLE, ">>");
+            });
+        });
 }
