@@ -1,6 +1,6 @@
 use crate::card::{Card, CardStack, CardVisualSize, STACK_DRAG_Z};
 use crate::recipe_defines::build_recipes;
-use crate::GameState;
+use crate::{is_game_running, GameState};
 use bevy::ecs::event::Events;
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet};
@@ -21,13 +21,18 @@ pub struct RecipePlugin;
 
 impl Plugin for RecipePlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<FinishedRecipeEvent>().add_system_set(
-            SystemSet::on_update(GameState::Run)
-                .with_system(recipe_check_system)
-                .with_system(recipe_timer_update_system)
-                .with_system(recipe_timer_graphics_system)
-                .with_system(recipe_finished_exclusive_system.exclusive_system().at_end()),
-        );
+        app.add_event::<FinishedRecipeEvent>()
+            .add_system_set(
+                SystemSet::on_update(GameState::Run)
+                    .with_system(recipe_check_system)
+                    .with_system(recipe_timer_graphics_system),
+            )
+            .add_system_set(
+                SystemSet::on_update(GameState::Run)
+                    .with_run_criteria(is_game_running)
+                    .with_system(recipe_timer_update_system)
+                    .with_system(recipe_finished_exclusive_system.exclusive_system().at_end()),
+            );
 
         let recipes = build_recipes(&mut app.world);
         app.insert_resource(recipes);
@@ -209,7 +214,7 @@ pub fn recipe_timer_graphics_system(
         (Entity, &Parent, &mut Sprite, &mut Transform),
         With<RecipeProgressBar>,
     >,
-    ongoing_recipes: Query<&OngoingRecipe, (With<CardStack>, Changed<OngoingRecipe>)>,
+    ongoing_recipes: Query<&OngoingRecipe, With<CardStack>>,
     stacks_with_new_recipes: Query<Entity, (With<CardStack>, Added<OngoingRecipe>)>,
     card_visual_size: Res<CardVisualSize>,
 ) {

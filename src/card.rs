@@ -4,7 +4,7 @@ use crate::stack_utils::{
     get_semi_random_stack_root_z, global_center_of_top_card, merge_stacks,
     relative_center_of_nth_card_in_stack, StackCreation, CARD_STACK_Y_SPACING, STACK_ROOT_Z_RANGE,
 };
-use crate::GameState;
+use crate::{is_game_running, GameState};
 use bevy::math::{const_vec2, const_vec3};
 use bevy::prelude::*;
 use bevy::render::camera::Camera2d;
@@ -49,6 +49,7 @@ impl Plugin for CardPlugin {
         app.add_event::<StackDroppedEvent>()
             .add_event::<CardPickedUpEvent>()
             .insert_resource(MouseWorldPos(None))
+            .insert_resource(CardVisualSize(Vec2::ONE))
             .add_system_to_stage(CoreStage::PreUpdate, mouse_world_pos_update_system)
             .add_system_set(
                 SystemSet::on_exit(GameState::AssetLoading).with_system(on_assets_loaded),
@@ -63,8 +64,8 @@ impl Plugin for CardPlugin {
                     .with_system(stack_mouse_drop_system)
                     .with_system(card_hover_system)
                     .with_system(hover_drag_cursor_system)
-                    .with_system(stack_overlap_nudging_system)
                     .with_system(dropped_stack_merging_system)
+                    .with_system(stack_overlap_nudging_system)
                     .with_system(find_stack_movement_target_system)
                     .with_system(stack_move_to_target_system),
             );
