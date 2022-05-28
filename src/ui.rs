@@ -84,14 +84,18 @@ fn game_speed_ui(mut context: ResMut<EguiContext>, mut speed: ResMut<TimeSpeed>)
         .resizable(false)
         .anchor(egui::Align2::RIGHT_TOP, GAME_SPEED_WINDOW_OFFSET)
         .show(context.ctx_mut(), |ui| {
-            // TODO (Wybe 2022-05-28): Highlight active buttons.
             ui.horizontal(|ui| {
                 let mut paused = !speed.running;
-                ui.toggle_value(&mut paused, "||");
+                ui.toggle_value(&mut paused, "||").on_hover_text("[space]");
                 speed.running = !paused;
 
-                ui.selectable_value(&mut speed.speed, Speed::NORMAL, ">");
-                ui.selectable_value(&mut speed.speed, Speed::DOUBLE, ">>");
+                // TODO (Wybe 2022-05-28): Use a key mapping plugin, instead of hardcoding.
+                ui.selectable_value(&mut speed.speed, Speed::NORMAL, ">")
+                    .on_hover_text("[1]");
+                ui.selectable_value(&mut speed.speed, Speed::DOUBLE, ">>")
+                    .on_hover_text("[2]");
+                ui.selectable_value(&mut speed.speed, Speed::TRIPLE, ">>>")
+                    .on_hover_text("[3]");
             });
         });
 }

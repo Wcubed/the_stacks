@@ -9,6 +9,8 @@ const MOUSE_WHEEL_ZOOM_FACTOR: f32 = 0.1;
 const MAX_ZOOMED_OUT_SCALE: f32 = 10.0;
 const MAX_ZOOMED_IN_SCALE: f32 = 1.0;
 
+const START_ZOOM: f32 = 2.0;
+
 pub struct OrthographicCameraPlugin;
 
 impl Plugin for OrthographicCameraPlugin {
@@ -23,7 +25,9 @@ impl Plugin for OrthographicCameraPlugin {
 }
 
 pub fn camera_setup(mut commands: Commands) {
-    commands.spawn_bundle(OrthographicCameraBundle::new_2d());
+    let mut camera_bundle = OrthographicCameraBundle::new_2d();
+    camera_bundle.transform.scale = Vec3::splat(START_ZOOM);
+    commands.spawn_bundle(camera_bundle);
 }
 
 pub fn camera_zoom_system(

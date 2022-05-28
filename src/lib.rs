@@ -57,6 +57,7 @@ impl TimeSpeed {
         match self.speed {
             Speed::NORMAL => 1.0,
             Speed::DOUBLE => 2.0,
+            Speed::TRIPLE => 3.0,
         }
     }
 }
@@ -65,11 +66,24 @@ impl TimeSpeed {
 pub enum Speed {
     NORMAL,
     DOUBLE,
+    TRIPLE,
 }
 
 fn game_speed_change_system(keys: Res<Input<KeyCode>>, mut speed: ResMut<TimeSpeed>) {
     if keys.just_pressed(KeyCode::Space) {
         speed.running = !speed.running;
+    }
+    if keys.just_pressed(KeyCode::Key1) {
+        speed.running = true;
+        speed.speed = Speed::NORMAL;
+    }
+    if keys.just_pressed(KeyCode::Key2) {
+        speed.running = true;
+        speed.speed = Speed::DOUBLE;
+    }
+    if keys.just_pressed(KeyCode::Key3) {
+        speed.running = true;
+        speed.speed = Speed::TRIPLE;
     }
 }
 
