@@ -89,13 +89,35 @@ impl<'a> RecipesBuilder<'a> {
         }
     }
 
-    pub fn with<Params>(
+    /// Instant recipes can be done while in-game time is paused.
+    pub fn with_instant_recipe<Params>(
+        mut self,
+        name: &'static str,
+        valid_callback: fn(&Vec<&Card>) -> bool,
+        finished_system: impl IntoSystem<(), (), Params> + 'static,
+    ) -> Self {
+        self.new_recipe(name, None, valid_callback, finished_system);
+        self
+    }
+
+    pub fn with_recipe<Params>(
         mut self,
         name: &'static str,
         seconds: f32,
         valid_callback: fn(&Vec<&Card>) -> bool,
         finished_system: impl IntoSystem<(), (), Params> + 'static,
     ) -> Self {
+        self.new_recipe(name, Some(seconds), valid_callback, finished_system);
+        self
+    }
+
+    fn new_recipe<Params>(
+        &mut self,
+        name: &'static str,
+        seconds: Option<f32>,
+        valid_callback: fn(&Vec<&Card>) -> bool,
+        finished_system: impl IntoSystem<(), (), Params> + 'static,
+    ) {
         let mut boxed_system = Box::new(IntoSystem::into_system(finished_system));
         boxed_system.initialize(self.world);
 
@@ -108,7 +130,6 @@ impl<'a> RecipesBuilder<'a> {
         };
 
         self.recipes.insert(id, new_recipe);
-        self
     }
 
     pub fn build(self) -> Recipes {
@@ -122,7 +143,8 @@ pub struct Recipes(HashMap<RecipeId, Recipe>);
 
 pub struct Recipe {
     /// Time the recipe takes, in seconds.
-    seconds: f32,
+    /// When `None` the recipe is instant, and can be done even if the in-game time is paused.
+    seconds: Option<f32>,
     /// This callback is called when cards are added or removed from stacks.
     /// Should return `true` if the given stack contents are valid for this recipe.
     valid_callback: fn(&Vec<&Card>) -> bool,
@@ -177,11 +199,15 @@ pub fn recipe_check_system(
         if !recipe_found {
             for (&id, recipe) in recipes.iter() {
                 if (recipe.valid_callback)(&cards_in_stack) {
-                    commands.entity(root).insert(OngoingRecipe {
-                        id,
-                        // TODO (Wybe 2022-05-25): Allow recipes to have differing durations.
-                        timer: Timer::new(Duration::from_secs_f32(recipe.seconds), false),
-                    });
+                    if let Some(seconds) = recipe.seconds {
+                        commands.entity(root).insert(OngoingRecipe {
+                            id,
+                            timer: Timer::new(Duration::from_secs_f32(seconds), false),
+                        });
+                    } else {
+                        // This recipe is instant, so it is immediately ready.
+                        commands.entity(root).insert(RecipeReadyMarker(id));
+                    }
 
                     // Stop at the first recipe found (best not to have overlapping recipes)
                     recipe_found = true;

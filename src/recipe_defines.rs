@@ -7,7 +7,7 @@ use bevy::prelude::*;
 
 pub fn build_recipes(world: &mut World) -> Recipes {
     RecipesBuilder::new(world)
-        .with(
+        .with_recipe(
             "Cutting tree",
             2.,
             |cards| {
@@ -48,7 +48,7 @@ pub fn build_recipes(world: &mut World) -> Recipes {
                 }
             },
         )
-        .with(
+        .with_recipe(
             "Making plank",
             3.,
             |cards| {
@@ -84,9 +84,8 @@ pub fn build_recipes(world: &mut World) -> Recipes {
                 }
             },
         )
-        .with(
+        .with_instant_recipe(
             "Selling cards",
-            0.5,
             |cards| {
                 // Bottom card is a market, and there are sellable cards.
                 cards.first().filter(|c| c.is_type(MARKET)).is_some()
