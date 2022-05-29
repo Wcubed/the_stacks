@@ -1,4 +1,5 @@
-use crate::card_types::{CardCategory, CardType, BUY_FOREST_PACK, COIN, MARKET, TREE, WORKER};
+use crate::card_packs::BUY_FOREST_PACK;
+use crate::card_types::{CardCategory, CardType, COIN, MARKET, TREE, WORKER};
 use crate::recipe::OngoingRecipe;
 use crate::stack_utils::{
     get_semi_random_stack_root_z, global_center_of_top_card, merge_stacks,
@@ -36,9 +37,9 @@ const STACK_AUTO_MOVEMENT_SPEED: f32 = 2000.0;
 const DROP_TARGET_SCALE_ANIMATION_AMOUNT: f32 = 0.02;
 const DROP_TARGET_SCALE_ANIMATION_SPEED: f32 = 4.0;
 
-pub struct CardPlugin;
+pub struct StackPlugin;
 
-impl Plugin for CardPlugin {
+impl Plugin for StackPlugin {
     fn build(&self, app: &mut App) {
         AssetLoader::new(GameState::AssetLoading)
             .continue_to_state(GameState::Run)
@@ -50,6 +51,7 @@ impl Plugin for CardPlugin {
             .add_event::<CardPickedUpEvent>()
             .insert_resource(MouseWorldPos(None))
             .insert_resource(CardVisualSize(Vec2::ONE))
+            .insert_resource(StackCreation::default())
             .add_system_to_stage(CoreStage::PreUpdate, mouse_world_pos_update_system)
             .add_system_set(
                 SystemSet::on_exit(GameState::AssetLoading).with_system(on_assets_loaded),
@@ -396,6 +398,8 @@ fn spawn_stack_drop_overlay(
     });
 }
 
+/// TODO (Wybe 2022-05-29): If this is ran before the card_pack_open_system, it tries to add the hover component to an entity that will be deleted.
+///                         which causes an error. Fix this in some way.
 pub fn card_hover_system(
     mut commands: Commands,
     maybe_mouse_world_pos: Res<MouseWorldPos>,
@@ -657,7 +661,6 @@ pub fn stack_move_to_target_system(
                 transform.translation.z = STACK_AUTO_MOVE_Z;
             }
         } else {
-            println!("?");
             // Target does not exist.
             remove_movement_target(&mut commands, root);
         }

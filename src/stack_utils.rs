@@ -23,6 +23,7 @@ const CARD_BORDER_COLOR: Color = Color::BLACK;
 const CARD_VALUE_SPACING_FROM_CARD_EDGE: f32 = 10.0;
 
 /// Resource that contains everything needed to create new cards.
+#[derive(Default)]
 pub struct StackCreation {
     background: Handle<Image>,
     border: Handle<Image>,

@@ -2,6 +2,7 @@
 #![warn(clippy::all, rust_2018_idioms)]
 
 mod camera;
+mod card_packs;
 mod card_types;
 mod recipe;
 mod recipe_defines;
@@ -10,8 +11,9 @@ mod stack_utils;
 mod ui;
 
 use crate::camera::OrthographicCameraPlugin;
+use crate::card_packs::CardPackPlugin;
 use crate::recipe::RecipePlugin;
-use crate::stack::CardPlugin;
+use crate::stack::StackPlugin;
 use crate::ui::UiPlugin;
 use bevy::ecs::schedule::ShouldRun;
 use bevy::prelude::*;
@@ -33,7 +35,8 @@ impl Plugin for TheStacksPlugin {
                 speed: Speed::NORMAL,
             })
             .add_state(GameState::AssetLoading)
-            .add_plugin(CardPlugin)
+            .add_plugin(StackPlugin)
+            .add_plugin(CardPackPlugin)
             .add_plugin(RecipePlugin)
             .add_plugin(OrthographicCameraPlugin)
             .add_plugin(UiPlugin)

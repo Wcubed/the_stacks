@@ -70,22 +70,6 @@ pub(crate) const MARKET: CardType = CardType {
     on_spawn: None,
 };
 
-pub(crate) const BUY_FOREST_PACK: CardType = CardType {
-    title: "Forest",
-    value: Some(3),
-    category: CardCategory::SystemCard,
-    description: "Buy a Forest Pack",
-    on_spawn: None,
-};
-
-pub(crate) const FOREST_PACK: CardType = CardType {
-    title: "Forest",
-    value: None,
-    category: CardCategory::CardPack,
-    description: "Right click to open",
-    on_spawn: None,
-};
-
 pub(crate) const TREE: CardType = CardType {
     title: "Tree",
     value: Some(0),
