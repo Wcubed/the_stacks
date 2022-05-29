@@ -6,6 +6,7 @@ use bevy::prelude::*;
 pub enum CardCategory {
     /// Cards which are integral to the game system, such as the market to sell things.
     SystemCard,
+    CardPack,
     Worker,
     Nature,
     Resource,
@@ -17,6 +18,7 @@ impl CardCategory {
     pub fn background_color(&self) -> Color {
         match self {
             CardCategory::SystemCard => Color::PURPLE,
+            CardCategory::CardPack => Color::BLACK,
             CardCategory::Worker => Color::hsl(25., 0.8, 0.2),
             CardCategory::Nature => Color::DARK_GREEN,
             CardCategory::Resource => Color::BLUE,
@@ -65,6 +67,22 @@ pub(crate) const MARKET: CardType = CardType {
     value: None,
     category: CardCategory::SystemCard,
     description: "Sell cards here for coins.",
+    on_spawn: None,
+};
+
+pub(crate) const BUY_FOREST_PACK: CardType = CardType {
+    title: "Forest",
+    value: Some(3),
+    category: CardCategory::SystemCard,
+    description: "Buy a Forest Pack",
+    on_spawn: None,
+};
+
+pub(crate) const FOREST_PACK: CardType = CardType {
+    title: "Forest",
+    value: None,
+    category: CardCategory::CardPack,
+    description: "Right click to open",
     on_spawn: None,
 };
 

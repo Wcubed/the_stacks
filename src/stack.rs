@@ -1,4 +1,4 @@
-use crate::card_types::{CardCategory, CardType, MARKET, TREE, WORKER};
+use crate::card_types::{CardCategory, CardType, BUY_FOREST_PACK, COIN, MARKET, TREE, WORKER};
 use crate::recipe::OngoingRecipe;
 use crate::stack_utils::{
     get_semi_random_stack_root_z, global_center_of_top_card, merge_stacks,
@@ -102,6 +102,7 @@ pub struct Card {
     pub title: &'static str,
     pub category: CardCategory,
     pub description: &'static str,
+    /// Value on a [CardCategory::SystemCard] means the cost to buy something.
     pub value: Option<usize>,
 }
 
@@ -176,9 +177,13 @@ pub fn on_assets_loaded(
 }
 
 pub fn spawn_test_cards(mut commands: Commands, creation: Res<StackCreation>) {
-    creation.spawn_stack(&mut commands, Vec2::ZERO, MARKET, 1, false);
+    let top_row_zero = Vec2::new(0., 400.0);
+    creation.spawn_stack(&mut commands, top_row_zero, MARKET, 1, false);
+    creation.spawn_stack(&mut commands, top_row_zero, BUY_FOREST_PACK, 1, false);
+
     creation.spawn_stack(&mut commands, Vec2::ZERO, TREE, 3, false);
     creation.spawn_stack(&mut commands, Vec2::ZERO, WORKER, 2, false);
+    creation.spawn_stack(&mut commands, Vec2::ZERO, COIN, 5, false);
 }
 
 /// Should be added to [PreUpdate](CoreStage::PreUpdate) to make sure the mouse position is

@@ -1,5 +1,5 @@
-use crate::card_types::CardCategory::Worker;
-use crate::card_types::{COIN, LOG, MARKET, PLANK, TREE};
+use crate::card_types::CardCategory::{SystemCard, Worker};
+use crate::card_types::{BUY_FOREST_PACK, COIN, FOREST_PACK, LOG, MARKET, PLANK, TREE};
 use crate::recipe::{FinishRecipeMarker, RecipeUses, Recipes, RecipesBuilder};
 use crate::stack::{Card, CardStack};
 use crate::stack_utils::{delete_cards, StackCreation};
@@ -85,11 +85,14 @@ pub fn build_recipes(world: &mut World) -> Recipes {
             },
         )
         .with_instant_recipe(
-            "Selling cards",
+            "Sell cards",
             |cards| {
                 // Bottom card is a market, and there are sellable cards.
+                // SystemCards are never sellable.
                 cards.first().filter(|c| c.is_type(MARKET)).is_some()
-                    && cards.iter().any(|c| c.value.is_some())
+                    && cards
+                        .iter()
+                        .any(|c| c.value.is_some() && c.category != SystemCard)
             },
             |mut commands: Commands,
              recipe_stack_query: Query<
@@ -106,6 +109,11 @@ pub fn build_recipes(world: &mut World) -> Recipes {
                         .iter()
                         .filter_map(|&entity| {
                             if let Ok(card) = card_query.get(entity) {
+                                if card.category == SystemCard {
+                                    // System cards can never be sold.
+                                    return None;
+                                }
+
                                 if let Some(value) = card.value {
                                     total_value += value;
                                     Some(entity)
@@ -131,6 +139,67 @@ pub fn build_recipes(world: &mut World) -> Recipes {
                             true,
                         );
                     }
+                }
+            },
+        )
+        .with_instant_recipe(
+            "Buy card pack",
+            |cards| {
+                // Bottom card is one of the card pack buy cards, and there are enough coins.
+
+                let bottom_card = cards.first().unwrap();
+                let cost = if bottom_card.is_type(BUY_FOREST_PACK) {
+                    bottom_card.value.unwrap()
+                } else {
+                    // Card is not one of the cards that allow buying packs.
+                    return false;
+                };
+                // Enough coins?
+                cards.iter().filter(|c| c.is_type(COIN)).count() >= cost
+            },
+            |mut commands: Commands,
+             recipe_stack_query: Query<
+                (Entity, &CardStack, &GlobalTransform),
+                With<FinishRecipeMarker>,
+            >,
+             card_query: Query<&Card>,
+             creation: Res<StackCreation>| {
+                for (root, stack, global_transform) in recipe_stack_query.iter() {
+                    let pack_cost = card_query.get(stack[0]).unwrap().value.unwrap();
+
+                    let coins_to_delete: Vec<Entity> = stack
+                        .iter()
+                        .filter_map(|&entity| {
+                            if let Ok(card) = card_query.get(entity) {
+                                if card.is_type(COIN) {
+                                    Some(entity)
+                                } else {
+                                    None
+                                }
+                            } else {
+                                None
+                            }
+                        })
+                        .take(pack_cost)
+                        .collect();
+
+                    if coins_to_delete.len() != pack_cost {
+                        // Not enough coins.
+                        return;
+                    }
+
+                    if !coins_to_delete.is_empty() {
+                        delete_cards(&mut commands, &coins_to_delete, root, stack);
+                    }
+
+                    // Spawn pack.
+                    creation.spawn_stack(
+                        &mut commands,
+                        global_transform.translation.truncate(),
+                        FOREST_PACK,
+                        1,
+                        true,
+                    );
                 }
             },
         )
