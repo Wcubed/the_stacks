@@ -212,7 +212,7 @@ pub fn set_stack_card_transforms(commands: &mut Commands, stack: &[Entity]) {
 pub fn stack_visual_size(single_card_visual_size: Vec2, cards_in_stack: usize) -> Vec2 {
     Vec2::new(
         single_card_visual_size.x,
-        single_card_visual_size.y + (cards_in_stack as f32 * CARD_STACK_Y_SPACING),
+        single_card_visual_size.y + ((cards_in_stack - 1) as f32 * CARD_STACK_Y_SPACING),
     )
 }
 
@@ -373,5 +373,27 @@ pub fn split_stack(
         Some(new_root_id)
     } else {
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::stack_utils::{stack_visual_size, CARD_STACK_Y_SPACING};
+    use bevy::prelude::Vec2;
+
+    #[test]
+    fn test_stack_visual_size() {
+        let single_card_size = Vec2::new(100.0, 250.0);
+        let one_card = stack_visual_size(single_card_size, 1);
+        assert_eq!(one_card, single_card_size);
+
+        let four_cards = stack_visual_size(single_card_size, 4);
+        assert_eq!(
+            four_cards,
+            Vec2::new(
+                single_card_size.x,
+                single_card_size.y + 3.0 * CARD_STACK_Y_SPACING
+            )
+        );
     }
 }
