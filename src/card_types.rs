@@ -1,5 +1,5 @@
-use crate::card::Card;
 use crate::recipe::RecipeUses;
+use crate::stack::Card;
 use bevy::prelude::*;
 
 #[derive(Eq, PartialEq, Clone, Copy)]

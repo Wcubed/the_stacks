@@ -2,16 +2,16 @@
 #![warn(clippy::all, rust_2018_idioms)]
 
 mod camera;
-mod card;
 mod card_types;
 mod recipe;
 mod recipe_defines;
+mod stack;
 mod stack_utils;
 mod ui;
 
 use crate::camera::OrthographicCameraPlugin;
-use crate::card::CardPlugin;
 use crate::recipe::RecipePlugin;
+use crate::stack::CardPlugin;
 use crate::ui::UiPlugin;
 use bevy::ecs::schedule::ShouldRun;
 use bevy::prelude::*;

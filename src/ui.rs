@@ -1,5 +1,5 @@
-use crate::card::{Card, CardStack, HoveredCard};
-use crate::recipe::{OngoingRecipe, Recipes};
+use crate::recipe::OngoingRecipe;
+use crate::stack::{Card, CardStack, HoveredCard};
 use crate::{Speed, TimeSpeed};
 use bevy::prelude::*;
 use bevy_egui::*;

@@ -4,7 +4,7 @@ use crate::stack_utils::{
     get_semi_random_stack_root_z, global_center_of_top_card, merge_stacks,
     relative_center_of_nth_card_in_stack, StackCreation, CARD_STACK_Y_SPACING, STACK_ROOT_Z_RANGE,
 };
-use crate::{is_time_running, GameState};
+use crate::GameState;
 use bevy::math::{const_vec2, const_vec3};
 use bevy::prelude::*;
 use bevy::render::camera::Camera2d;
@@ -826,7 +826,7 @@ fn get_movement_to_no_longer_overlap(
 
 #[cfg(test)]
 mod tests {
-    use crate::{card::get_movement_to_no_longer_overlap, Vec2};
+    use crate::{stack::get_movement_to_no_longer_overlap, Vec2};
 
     #[test]
     fn test_get_movement_to_no_longer_overlap() {
