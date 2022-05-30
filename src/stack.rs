@@ -1,6 +1,6 @@
 use crate::card_packs::BUY_FOREST_PACK;
 use crate::card_types::{CardCategory, CardType, COIN, MARKET, TREE, WORKER};
-use crate::recipe::OngoingRecipe;
+use crate::recipe::{is_ongoing_recipe_valid_for_stack, OngoingRecipe, Recipes};
 use crate::stack_utils::{
     get_semi_random_stack_root_z, global_center_of_top_card, merge_stacks,
     relative_center_of_nth_card_in_stack, StackCreation, CARD_STACK_Y_SPACING, STACK_ROOT_Z_RANGE,
@@ -298,49 +298,83 @@ pub fn card_mouse_pickup_system(
 }
 
 /// Shows where stacks can be dropped, when a stack is being dragged.
+///
+/// Prevents breaking recipes by dropping cards onto them.
 pub fn stack_drop_target_visuals_system(
     mut commands: Commands,
-    dragged_stack_query: Query<Entity, With<StackRelativeDragPosition>>,
+    dragged_stack_query: Query<
+        (&CardStack, Option<&OngoingRecipe>),
+        With<StackRelativeDragPosition>,
+    >,
     potential_target_stacks_query: Query<
-        (Entity, &CardStack, ChangeTrackers<CardStack>),
+        (
+            Entity,
+            &CardStack,
+            ChangeTrackers<CardStack>,
+            Option<&OngoingRecipe>,
+            Option<ChangeTrackers<OngoingRecipe>>,
+        ),
         Without<StackRelativeDragPosition>,
     >,
     mut drop_target_overlay_query: Query<
         (Entity, &Parent, &mut Transform),
         With<IsDropTargetOverlay>,
     >,
+    card_query: Query<&Card>,
     card_images: Res<CardImages>,
+    recipes: Res<Recipes>,
 ) {
     // TODO (Wybe 2022-05-26): Refactor this to be less of an if/else spaghetti. Maybe make it multiple systems
     // TODO (Wybe 2022-05-26): When a stack is moving on it's own. Or starts moving on it's own, it shouldn't be droppable.
     // TODO (Wybe 2022-05-26): Make the droppable criteria a function, so that a dropped card can also make use of it.
     // TODO (Wybe 2022-05-26): Ongoing recipe's are only drop targets if the current card wouldn't break the recipe (for example, when adding another tree to a woodcutting worker)
-    if !dragged_stack_query.is_empty() {
-        if drop_target_overlay_query.is_empty() {
-            // Drag just started. Spawn in all overlays
-            for (root, stack, _) in potential_target_stacks_query.iter() {
-                spawn_stack_drop_overlay(
-                    &mut commands,
-                    root,
-                    card_images.stack_drop_target.clone(),
-                    stack.len(),
-                );
-            }
-        } else {
-            // Drag ongoing. Update changed stacks.
-            for (root, stack, changed) in potential_target_stacks_query.iter() {
-                if !changed.is_changed() {
+    // This system only works with a single dragged stack. Multiple dragged stacks will be ignored.
+    if let Some((dropped_stack, maybe_dropped_recipe)) = dragged_stack_query.iter().next() {
+        for (root, stack, stack_changed, maybe_recipe, maybe_recipe_changed) in
+            potential_target_stacks_query.iter()
+        {
+            let merging_would_break_recipe = would_merging_break_ongoing_recipes(
+                maybe_dropped_recipe,
+                &dropped_stack.0,
+                maybe_recipe,
+                &stack.0,
+                &card_query,
+                &recipes,
+            );
+
+            if drop_target_overlay_query.is_empty() {
+                // Drag just started. Spawn in all overlays
+                if !merging_would_break_recipe {
+                    spawn_stack_drop_overlay(
+                        &mut commands,
+                        root,
+                        card_images.stack_drop_target.clone(),
+                        stack.len(),
+                    );
+                }
+            } else {
+                // Drag ongoing. Update changed stacks.
+                let recipe_changed = if let Some(recipe_changed) = maybe_recipe_changed {
+                    recipe_changed.is_changed() || recipe_changed.is_added()
+                } else {
+                    false
+                };
+                if !(stack_changed.is_changed() || recipe_changed) {
                     continue;
                 }
 
                 let maybe_overlay = drop_target_overlay_query
                     .iter_mut()
                     .find(|(_, &parent, _)| parent.0 == root)
-                    .map(|(_, _, transform)| transform);
+                    .map(|(overlay, _, transform)| (overlay, transform));
 
-                if let Some(mut transform) = maybe_overlay {
-                    transform.translation = stack_drop_overlay_relative_transform(stack.len());
-                } else {
+                if let Some((overlay, mut transform)) = maybe_overlay {
+                    if merging_would_break_recipe {
+                        commands.entity(overlay).despawn_recursive();
+                    } else {
+                        transform.translation = stack_drop_overlay_relative_transform(stack.len());
+                    }
+                } else if !merging_would_break_recipe {
                     spawn_stack_drop_overlay(
                         &mut commands,
                         root,
@@ -356,6 +390,43 @@ pub fn stack_drop_target_visuals_system(
             commands.entity(overlay).despawn();
         }
     }
+}
+
+fn would_merging_break_ongoing_recipes(
+    maybe_dropped_recipe: Option<&OngoingRecipe>,
+    dropped_stack: &[Entity],
+    maybe_target_recipe: Option<&OngoingRecipe>,
+    target_stack: &[Entity],
+    card_query: &Query<&Card>,
+    recipes: &Res<Recipes>,
+) -> bool {
+    if maybe_dropped_recipe.is_none() && maybe_target_recipe.is_none() {
+        // Can't break recipes that are not there.
+        return false;
+    }
+
+    let mut merged_stack = target_stack.to_owned();
+    merged_stack.extend(dropped_stack);
+
+    let cards: Vec<&Card> = merged_stack
+        .iter()
+        .filter_map(|&e| card_query.get(e).ok())
+        .collect();
+
+    if maybe_dropped_recipe.is_some()
+        && !is_ongoing_recipe_valid_for_stack(maybe_dropped_recipe, &cards, recipes)
+    {
+        // Breaks recipe of the dropped stack.
+        return true;
+    }
+    if maybe_target_recipe.is_some()
+        && !is_ongoing_recipe_valid_for_stack(maybe_target_recipe, &cards, recipes)
+    {
+        // Breaks recipe on the target stack.
+        return true;
+    }
+
+    false
 }
 
 pub fn stack_drop_overlay_animation_system(
@@ -492,6 +563,8 @@ pub fn hover_drag_cursor_system(
 pub fn dropped_stack_merging_system(
     mut commands: Commands,
     stack_query: Query<(Entity, &GlobalTransform, &CardStack, Option<&OngoingRecipe>)>,
+    card_query: Query<&Card>,
+    recipes: Res<Recipes>,
     card_visual_size: Res<CardVisualSize>,
     mut stack_dropped_reader: EventReader<StackDroppedEvent>,
 ) {
@@ -501,6 +574,9 @@ pub fn dropped_stack_merging_system(
     {
         let mut stack_merged = false;
 
+        let (_, _, dropped_stack, maybe_source_recipe) =
+            stack_query.get(*dropped_stack_root).unwrap();
+
         // Find which card we are overlapping the most.
         // TODO (Wybe 2022-05-14): This should also check if the card we are overlapping is
         //   a valid target to stack with.
@@ -509,6 +585,17 @@ pub fn dropped_stack_merging_system(
         {
             if stack_root == *dropped_stack_root {
                 // Cannot drop onto self.
+                continue;
+            }
+            if would_merging_break_ongoing_recipes(
+                maybe_source_recipe,
+                dropped_stack,
+                maybe_target_recipe,
+                target_stack,
+                &card_query,
+                &recipes,
+            ) {
+                // Shouldn't break ongoing recipes.
                 continue;
             }
 
@@ -525,8 +612,6 @@ pub fn dropped_stack_merging_system(
             )
             .is_some()
             {
-                let (_, _, dropped_stack, maybe_source_recipe) =
-                    stack_query.get(*dropped_stack_root).unwrap();
                 crate::stack_utils::merge_stacks(
                     &mut commands,
                     *dropped_stack_root,

@@ -93,7 +93,7 @@ impl<'a> RecipesBuilder<'a> {
     pub fn with_instant_recipe<Params>(
         mut self,
         name: &'static str,
-        valid_callback: fn(&Vec<&Card>) -> bool,
+        valid_callback: fn(&[&Card]) -> bool,
         finished_system: impl IntoSystem<(), (), Params> + 'static,
     ) -> Self {
         self.new_recipe(name, None, valid_callback, finished_system);
@@ -104,7 +104,7 @@ impl<'a> RecipesBuilder<'a> {
         mut self,
         name: &'static str,
         seconds: f32,
-        valid_callback: fn(&Vec<&Card>) -> bool,
+        valid_callback: fn(&[&Card]) -> bool,
         finished_system: impl IntoSystem<(), (), Params> + 'static,
     ) -> Self {
         self.new_recipe(name, Some(seconds), valid_callback, finished_system);
@@ -115,7 +115,7 @@ impl<'a> RecipesBuilder<'a> {
         &mut self,
         name: &'static str,
         seconds: Option<f32>,
-        valid_callback: fn(&Vec<&Card>) -> bool,
+        valid_callback: fn(&[&Card]) -> bool,
         finished_system: impl IntoSystem<(), (), Params> + 'static,
     ) {
         let mut boxed_system = Box::new(IntoSystem::into_system(finished_system));
@@ -125,7 +125,7 @@ impl<'a> RecipesBuilder<'a> {
 
         let new_recipe = Recipe {
             seconds,
-            valid_callback,
+            is_valid: valid_callback,
             finish_system: boxed_system,
         };
 
@@ -144,10 +144,10 @@ pub struct Recipes(HashMap<RecipeId, Recipe>);
 pub struct Recipe {
     /// Time the recipe takes, in seconds.
     /// When `None` the recipe is instant, and can be done even if the in-game time is paused.
-    seconds: Option<f32>,
+    pub seconds: Option<f32>,
     /// This callback is called when cards are added or removed from stacks.
     /// Should return `true` if the given stack contents are valid for this recipe.
-    valid_callback: fn(&Vec<&Card>) -> bool,
+    pub is_valid: fn(&[&Card]) -> bool,
     /// System that applies the effects of a recipe.
     /// Only called a maximum of once per frame.
     /// The stacks that need to be handled will be indicated by a [FinishRecipeMarker].
@@ -184,21 +184,14 @@ pub fn recipe_check_system(
             continue;
         }
 
-        let cards_in_stack = stack.iter().map(|&e| cards.get(e).unwrap()).collect();
+        let cards_in_stack: Vec<&Card> = stack.iter().map(|&e| cards.get(e).unwrap()).collect();
 
-        let mut recipe_found = false;
-
-        if let Some(ongoing_recipe) = maybe_ongoing_recipe {
-            if let Some(recipe) = recipes.get(&ongoing_recipe.id) {
-                if (recipe.valid_callback)(&cards_in_stack) {
-                    recipe_found = true;
-                }
-            }
-        }
+        let mut recipe_found =
+            is_ongoing_recipe_valid_for_stack(maybe_ongoing_recipe, &cards_in_stack, &recipes);
 
         if !recipe_found {
             for (&id, recipe) in recipes.iter() {
-                if (recipe.valid_callback)(&cards_in_stack) {
+                if (recipe.is_valid)(&cards_in_stack) {
                     if let Some(seconds) = recipe.seconds {
                         commands.entity(root).insert(OngoingRecipe {
                             id,
@@ -219,6 +212,18 @@ pub fn recipe_check_system(
         if !recipe_found {
             commands.entity(root).remove::<OngoingRecipe>();
         }
+    }
+}
+
+pub fn is_ongoing_recipe_valid_for_stack(
+    maybe_ongoing: Option<&OngoingRecipe>,
+    stack: &[&Card],
+    recipes: &Res<Recipes>,
+) -> bool {
+    if let Some(recipe) = maybe_ongoing.and_then(|r| recipes.get(&r.id)) {
+        (recipe.is_valid)(stack)
+    } else {
+        false
     }
 }
 
