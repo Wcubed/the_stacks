@@ -17,12 +17,7 @@ use crate::stack::StackPlugin;
 use crate::ui::UiPlugin;
 use bevy::ecs::schedule::ShouldRun;
 use bevy::prelude::*;
-
-#[derive(Clone, Eq, PartialEq, Debug, Hash)]
-enum GameState {
-    AssetLoading,
-    Run,
-}
+use std::fmt::{write, Formatter};
 
 pub struct TheStacksPlugin;
 
@@ -35,6 +30,11 @@ impl Plugin for TheStacksPlugin {
                 speed: Speed::NORMAL,
             })
             .add_state(GameState::AssetLoading)
+            .add_stage_after(
+                CoreStage::Update,
+                UpdateStage::SystemsThatDeleteCards.as_str(),
+                SystemStage::parallel(),
+            )
             .add_plugin(StackPlugin)
             .add_plugin(CardPackPlugin)
             .add_plugin(RecipePlugin)
@@ -43,6 +43,26 @@ impl Plugin for TheStacksPlugin {
             .add_system_set(
                 SystemSet::on_update(GameState::Run).with_system(game_speed_change_system),
             );
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Hash)]
+enum GameState {
+    AssetLoading,
+    Run,
+}
+
+enum UpdateStage {
+    /// All systems that are allowed to delete stacks / cards should go in here.
+    /// This to prevent "cannot add component to entity because it has already been deleted" errors.
+    SystemsThatDeleteCards,
+}
+
+impl UpdateStage {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            UpdateStage::SystemsThatDeleteCards => "SystemsThatDeleteCards",
+        }
     }
 }
 

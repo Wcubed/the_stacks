@@ -1,6 +1,7 @@
 use crate::card_types::{CardCategory, CardType, TREE};
 use crate::stack::{Card, CardStack, HoveredCard};
 use crate::stack_utils::{delete_cards, StackCreation};
+use crate::UpdateStage;
 use bevy::prelude::*;
 
 pub(crate) const BUY_FOREST_PACK: CardType = CardType {
@@ -29,7 +30,7 @@ pub struct CardPackPlugin;
 impl Plugin for CardPackPlugin {
     fn build(&self, app: &mut App) {
         app.add_system_set_to_stage(
-            CoreStage::PostUpdate,
+            UpdateStage::SystemsThatDeleteCards.as_str(),
             SystemSet::new().with_system(card_pack_open_system),
         );
     }
