@@ -12,8 +12,12 @@ pub fn build_recipes(world: &mut World) -> Recipes {
             "Cutting tree",
             2.,
             |cards| {
-                // Exactly 1 of type Worker, and the rest trees.
-                cards.iter().any(|c| c.category == Worker)
+                // Top card is a worker, and the rest is trees.
+                cards
+                    .iter()
+                    .last()
+                    .filter(|c| c.category == Worker)
+                    .is_some()
                     && cards.iter().filter(|c| c.is_type(TREE)).count() == cards.len() - 1
                     && cards.len() > 1
             },

@@ -303,7 +303,11 @@ pub fn card_mouse_pickup_system(
 pub fn stack_drop_target_visuals_system(
     mut commands: Commands,
     dragged_stack_query: Query<
-        (&CardStack, Option<&OngoingRecipe>),
+        (
+            &CardStack,
+            ChangeTrackers<CardStack>,
+            Option<&OngoingRecipe>,
+        ),
         With<StackRelativeDragPosition>,
     >,
     potential_target_stacks_query: Query<
@@ -326,24 +330,24 @@ pub fn stack_drop_target_visuals_system(
 ) {
     // TODO (Wybe 2022-05-26): Refactor this to be less of an if/else spaghetti. Maybe make it multiple systems
     // TODO (Wybe 2022-05-26): When a stack is moving on it's own. Or starts moving on it's own, it shouldn't be droppable.
-    // TODO (Wybe 2022-05-26): Make the droppable criteria a function, so that a dropped card can also make use of it.
-    // TODO (Wybe 2022-05-26): Ongoing recipe's are only drop targets if the current card wouldn't break the recipe (for example, when adding another tree to a woodcutting worker)
     // This system only works with a single dragged stack. Multiple dragged stacks will be ignored.
-    if let Some((dropped_stack, maybe_dropped_recipe)) = dragged_stack_query.iter().next() {
+    if let Some((dragged_stack, dragged_stack_changed, maybe_dragged_stack_recipe)) =
+        dragged_stack_query.iter().next()
+    {
         for (root, stack, stack_changed, maybe_recipe, maybe_recipe_changed) in
             potential_target_stacks_query.iter()
         {
-            let merging_would_break_recipe = would_merging_break_ongoing_recipes(
-                maybe_dropped_recipe,
-                &dropped_stack.0,
-                maybe_recipe,
-                &stack.0,
-                &card_query,
-                &recipes,
-            );
-
             if drop_target_overlay_query.is_empty() {
                 // Drag just started. Spawn in all overlays
+                let merging_would_break_recipe = would_merging_break_ongoing_recipes(
+                    maybe_dragged_stack_recipe,
+                    &dragged_stack.0,
+                    maybe_recipe,
+                    &stack.0,
+                    &card_query,
+                    &recipes,
+                );
+
                 if !merging_would_break_recipe {
                     spawn_stack_drop_overlay(
                         &mut commands,
@@ -359,9 +363,21 @@ pub fn stack_drop_target_visuals_system(
                 } else {
                     false
                 };
-                if !(stack_changed.is_changed() || recipe_changed) {
+                if !(stack_changed.is_changed()
+                    || dragged_stack_changed.is_changed()
+                    || recipe_changed)
+                {
                     continue;
                 }
+
+                let merging_would_break_recipe = would_merging_break_ongoing_recipes(
+                    maybe_dragged_stack_recipe,
+                    &dragged_stack.0,
+                    maybe_recipe,
+                    &stack.0,
+                    &card_query,
+                    &recipes,
+                );
 
                 let maybe_overlay = drop_target_overlay_query
                     .iter_mut()
