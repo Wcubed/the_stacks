@@ -1,23 +1,24 @@
 #![forbid(unsafe_code)]
 #![warn(clippy::all, rust_2018_idioms)]
+// Allow elided lifetimes for now. Because it marks bevy's `Command` and `Query` everywhere.
+// Which makes system arguments even more verbose than they already are.
+// Once the elided lifetimes are no longer allowed, bevy will probably have a solution for it.
+#![allow(elided_lifetimes_in_paths)]
 
 mod camera;
 mod card_packs;
 mod card_types;
 mod recipe;
-mod recipe_defines;
 mod stack;
-mod stack_utils;
 mod ui;
 
-use crate::camera::OrthographicCameraPlugin;
+use crate::camera::*;
 use crate::card_packs::CardPackPlugin;
 use crate::recipe::RecipePlugin;
 use crate::stack::StackPlugin;
 use crate::ui::UiPlugin;
 use bevy::ecs::schedule::ShouldRun;
 use bevy::prelude::*;
-use std::fmt::{write, Formatter};
 
 pub struct TheStacksPlugin;
 

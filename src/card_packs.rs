@@ -1,6 +1,6 @@
 use crate::card_types::{CardCategory, CardType, TREE};
+use crate::stack::stack_utils::{delete_cards, StackCreation};
 use crate::stack::{Card, CardStack, HoveredCard};
-use crate::stack_utils::{delete_cards, StackCreation};
 use crate::UpdateStage;
 use bevy::prelude::*;
 

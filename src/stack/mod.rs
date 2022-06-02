@@ -1,15 +1,18 @@
+pub mod stack_utils;
+
 use crate::card_packs::BUY_FOREST_PACK;
 use crate::card_types::{CardCategory, CardType, COIN, MARKET, TREE, WORKER};
 use crate::recipe::{is_ongoing_recipe_valid_for_stack, OngoingRecipe, Recipes};
-use crate::stack_utils::{
-    get_semi_random_stack_root_z, global_center_of_top_card, merge_stacks,
-    relative_center_of_nth_card_in_stack, StackCreation, CARD_STACK_Y_SPACING, STACK_ROOT_Z_RANGE,
-};
+use crate::stack::stack_utils::{split_stack, stack_visual_size};
 use crate::GameState;
 use bevy::math::{const_vec2, const_vec3};
 use bevy::prelude::*;
 use bevy::render::camera::Camera2d;
 use bevy_asset_loader::{AssetCollection, AssetLoader};
+use stack_utils::{
+    get_semi_random_stack_root_z, global_center_of_top_card, merge_stacks,
+    relative_center_of_nth_card_in_stack, StackCreation, CARD_STACK_Y_SPACING, STACK_ROOT_Z_RANGE,
+};
 use std::collections::HashSet;
 
 /// Dragged cards have a z value that is higher than the cards that are still on the "floor".
@@ -274,7 +277,7 @@ pub fn card_mouse_pickup_system(
                         .remove::<StackPhysics>();
                 } else {
                     // Picking up some other card in the stack, which means splitting it.
-                    let new_root = crate::stack_utils::split_stack(
+                    let new_root = split_stack(
                         &mut commands,
                         stack_root.0,
                         &stack.0,
@@ -615,10 +618,8 @@ pub fn dropped_stack_merging_system(
                 continue;
             }
 
-            let center_of_top_card = crate::stack_utils::global_center_of_top_card(
-                stack_global_transform,
-                target_stack.len(),
-            );
+            let center_of_top_card =
+                global_center_of_top_card(stack_global_transform, target_stack.len());
 
             // TODO (Wybe 2022-05-24): Also take into account rotating and scaling.
             if in_bounds(
@@ -628,7 +629,7 @@ pub fn dropped_stack_merging_system(
             )
             .is_some()
             {
-                crate::stack_utils::merge_stacks(
+                merge_stacks(
                     &mut commands,
                     *dropped_stack_root,
                     dropped_stack,
@@ -674,14 +675,12 @@ pub fn stack_overlap_nudging_system(
     ) = combinations.fetch_next()
     {
         let stack1_wanted_space =
-            crate::stack_utils::stack_visual_size(card_visual_size.0, cards_in_stack1.len())
-                + STACK_OVERLAP_SPACING;
+            stack_visual_size(card_visual_size.0, cards_in_stack1.len()) + STACK_OVERLAP_SPACING;
         let mut stack1_center = global_transform1.translation.truncate();
         stack1_center.y -= 0.5 * cards_in_stack1.len() as f32 * CARD_STACK_Y_SPACING;
 
         let stack2_wanted_space =
-            crate::stack_utils::stack_visual_size(card_visual_size.0, cards_in_stack2.len())
-                + STACK_OVERLAP_SPACING;
+            stack_visual_size(card_visual_size.0, cards_in_stack2.len()) + STACK_OVERLAP_SPACING;
         let mut stack2_center = global_transform2.translation.truncate();
         stack2_center.y -= 0.5 * cards_in_stack2.len() as f32 * CARD_STACK_Y_SPACING;
 

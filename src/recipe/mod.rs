@@ -1,8 +1,10 @@
-use crate::recipe_defines::build_recipes;
+mod recipe_defines;
+
 use crate::stack::{Card, CardStack, CardVisualSize, DELTA_Z, STACK_DRAG_Z};
 use crate::{is_time_running, GameState, TimeSpeed};
 use bevy::ecs::event::Events;
 use bevy::prelude::*;
+use recipe_defines::build_recipes;
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
@@ -252,10 +254,7 @@ pub fn recipe_timer_graphics_system(
         (Entity, &Parent, &mut Sprite, &mut Transform),
         With<RecipeProgressBar>,
     >,
-    mut recipe_progress_bar_backgrounds: Query<
-        (Entity, &Parent),
-        With<RecipeProgressBarBackground>,
-    >,
+    recipe_progress_bar_backgrounds: Query<(Entity, &Parent), With<RecipeProgressBarBackground>>,
     ongoing_recipes: Query<&OngoingRecipe, With<CardStack>>,
     stacks_with_new_recipes: Query<Entity, (With<CardStack>, Added<OngoingRecipe>)>,
     card_visual_size: Res<CardVisualSize>,
