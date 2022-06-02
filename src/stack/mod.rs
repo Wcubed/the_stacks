@@ -1,4 +1,5 @@
 pub mod stack_utils;
+mod tests;
 
 use crate::card_packs::BUY_FOREST_PACK;
 use crate::card_types::{CardCategory, CardType, COIN, MARKET, TREE, WORKER};
@@ -152,7 +153,7 @@ pub struct IsDropTargetOverlay;
 pub struct StackRelativeDragPosition(Vec2);
 
 /// Indicates a card is being hovered with the mouse.
-#[derive(Component)]
+#[derive(Component, PartialEq, Debug)]
 pub struct HoveredCard {
     relative_hover_pos: Vec2,
 }
@@ -934,7 +935,7 @@ fn get_movement_to_no_longer_overlap(
 }
 
 #[cfg(test)]
-mod tests {
+mod test {
     use crate::{stack::get_movement_to_no_longer_overlap, Vec2};
 
     #[test]

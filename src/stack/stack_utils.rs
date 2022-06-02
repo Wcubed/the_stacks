@@ -379,7 +379,7 @@ pub fn split_stack(
 
 #[cfg(test)]
 mod tests {
-    use crate::stack_utils::{stack_visual_size, CARD_STACK_Y_SPACING};
+    use crate::stack::stack_utils::{stack_visual_size, CARD_STACK_Y_SPACING};
     use bevy::prelude::Vec2;
 
     #[test]
