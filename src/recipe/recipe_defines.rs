@@ -1,6 +1,6 @@
 use crate::card_packs::{BUY_FOREST_PACK, FOREST_PACK};
 use crate::card_types::CardCategory::{SystemCard, Worker};
-use crate::card_types::{COIN, LOG, MARKET, PLANK, TREE};
+use crate::card_types::{CLAY, COIN, HEARTSTONE, LOG, MARKET, PLANK, TREE, VILLAGER};
 use crate::recipe::{FinishRecipeMarker, RecipeUses, Recipes, RecipesBuilder};
 use crate::stack::stack_utils::{delete_cards, StackCreation};
 use crate::stack::{Card, CardStack};
@@ -202,6 +202,48 @@ pub fn build_recipes(world: &mut World) -> Recipes {
                         &mut commands,
                         global_transform.translation.truncate(),
                         FOREST_PACK,
+                        1,
+                        true,
+                    );
+                }
+            },
+        )
+        .with_recipe(
+            "Creating Villager",
+            5.0,
+            |cards| {
+                // 1 of a worker category, 2 clay and 1 heartstone
+                cards.len() == 4
+                    && cards.iter().any(|c| c.category == Worker)
+                    && cards.iter().filter(|c| c.is_type(CLAY)).count() == 2
+                    && cards.iter().any(|c| c.is_type(HEARTSTONE))
+            },
+            |mut commands: Commands,
+             recipe_stack_query: Query<
+                (Entity, &CardStack, &GlobalTransform),
+                With<FinishRecipeMarker>,
+            >,
+             card_query: Query<&Card>,
+             creation: Res<StackCreation>| {
+                for (root, stack, global_transform) in recipe_stack_query.iter() {
+                    let cards_to_be_deleted: Vec<Entity> = stack
+                        .iter()
+                        .filter(|&&e| {
+                            card_query
+                                .get(e)
+                                .ok()
+                                .map(|c| c.is_type(CLAY) || c.is_type(HEARTSTONE))
+                                .unwrap_or(false)
+                        })
+                        .map(|e| *e)
+                        .collect();
+
+                    delete_cards(&mut commands, &cards_to_be_deleted, root, stack);
+
+                    creation.spawn_stack(
+                        &mut commands,
+                        global_transform.translation.truncate(),
+                        VILLAGER,
                         1,
                         true,
                     );

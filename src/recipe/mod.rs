@@ -115,6 +115,7 @@ impl<'a> RecipesBuilder<'a> {
 
     fn new_recipe<Params>(
         &mut self,
+        // TODO (Wybe 2022-06-05): Use these names as indexes into some sort of translation file.
         name: &'static str,
         seconds: Option<f32>,
         valid_callback: fn(&[&Card]) -> bool,

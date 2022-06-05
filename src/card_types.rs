@@ -12,6 +12,7 @@ pub enum CardCategory {
     Resource,
     Valuable,
     Food,
+    Gem,
 }
 
 impl CardCategory {
@@ -24,6 +25,7 @@ impl CardCategory {
             CardCategory::Resource => Color::BLUE,
             CardCategory::Food => Color::OLIVE,
             CardCategory::Valuable => Color::YELLOW,
+            CardCategory::Gem => Color::MAROON,
         }
     }
 
@@ -80,6 +82,14 @@ pub(crate) const TREE: CardType = CardType {
     }),
 };
 
+pub(crate) const CLAY: CardType = CardType {
+    title: "Clay",
+    value: Some(1),
+    category: CardCategory::Resource,
+    description: "Very moldable.\nSome say people are made of this...",
+    on_spawn: None,
+};
+
 pub(crate) const LOG: CardType = CardType {
     title: "Log",
     value: Some(1),
@@ -96,7 +106,15 @@ pub(crate) const PLANK: CardType = CardType {
     on_spawn: None,
 };
 
-pub(crate) const WORKER: CardType = CardType {
+pub(crate) const HEARTSTONE: CardType = CardType {
+    title: "Heartstone",
+    value: Some(5),
+    category: CardCategory::Gem,
+    description: "Brimming with life!",
+    on_spawn: None,
+};
+
+pub(crate) const VILLAGER: CardType = CardType {
     title: "Villager",
     value: None,
     category: CardCategory::Worker,

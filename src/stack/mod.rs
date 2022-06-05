@@ -2,7 +2,7 @@ pub mod stack_utils;
 mod tests;
 
 use crate::card_packs::BUY_FOREST_PACK;
-use crate::card_types::{CardCategory, CardType, COIN, MARKET, TREE, WORKER};
+use crate::card_types::{CardCategory, CardType, CLAY, COIN, HEARTSTONE, MARKET, TREE, VILLAGER};
 use crate::recipe::{is_ongoing_recipe_valid_for_stack, OngoingRecipe, Recipes};
 use crate::stack::stack_utils::{split_stack, stack_visual_size};
 use crate::GameState;
@@ -188,8 +188,10 @@ pub fn spawn_test_cards(mut commands: Commands, creation: Res<StackCreation>) {
     creation.spawn_stack(&mut commands, top_row_zero, BUY_FOREST_PACK, 1, false);
 
     creation.spawn_stack(&mut commands, Vec2::ZERO, TREE, 3, false);
-    creation.spawn_stack(&mut commands, Vec2::ZERO, WORKER, 2, false);
+    creation.spawn_stack(&mut commands, Vec2::ZERO, VILLAGER, 2, false);
     creation.spawn_stack(&mut commands, Vec2::ZERO, COIN, 5, false);
+    creation.spawn_stack(&mut commands, Vec2::ZERO, CLAY, 5, false);
+    creation.spawn_stack(&mut commands, Vec2::ZERO, HEARTSTONE, 3, false);
 }
 
 /// Should be added to [PreUpdate](CoreStage::PreUpdate) to make sure the mouse position is
@@ -778,7 +780,8 @@ fn remove_movement_target(commands: &mut Commands, stack_root: Entity) {
 /// Handles stacks marked with [StackLookingForTargetLocation] (and removes the mark).
 /// Finds either an open space, or another stack that this one can combine with.
 /// Wont auto-combine with ongoing recipes.
-/// TODO (Wybe 2022-05-30): Prevent automatically creating recipes (like dropping a stack of coins onto a "buy stack" card that already has a coin on it).
+/// TODO (Wybe 2022-05-30): Prevent instant recipes from being automatically creating (like dropping a stack of coins onto a "buy stack" card that already has a coin on it).
+///     non-instant recipes are allowed to be auto-created, because the user can cancel them, or even set the cards up so that it auto-creates a wanted recipe.
 pub fn find_stack_movement_target_system(
     mut commands: Commands,
     lost_stack_query: Query<
@@ -800,8 +803,6 @@ pub fn find_stack_movement_target_system(
     let search_radius_range = card_visual_size.length() * card_cross_sections_max_search_radius;
 
     for (root, global_transform, stack) in lost_stack_query.iter() {
-        // Stacks want to auto-stack if the top card on the target stack is of the same type.
-        // TODO (Wybe 2022-05-25): Prevent recipes from automatically forming.
         // TODO (Wybe 2022-05-25): don't unwrap here.
         let wanted_top_card = cards.get(stack[0]).unwrap();
         if stack.iter().map(|&e| cards.get(e)).any(|maybe_card| {
