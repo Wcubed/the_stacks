@@ -42,7 +42,7 @@ pub fn build_recipes(world: &mut World) -> Recipes {
                                 creation.spawn_stack(
                                     &mut commands,
                                     global_transform.translation.truncate(),
-                                    LOG,
+                                    &LOG,
                                     1,
                                     true,
                                 );
@@ -78,7 +78,7 @@ pub fn build_recipes(world: &mut World) -> Recipes {
                                 creation.spawn_stack(
                                     &mut commands,
                                     global_transform.translation.truncate(),
-                                    PLANK,
+                                    &PLANK,
                                     1,
                                     true,
                                 );
@@ -139,7 +139,7 @@ pub fn build_recipes(world: &mut World) -> Recipes {
                         creation.spawn_stack(
                             &mut commands,
                             global_transform.translation.truncate(),
-                            COIN,
+                            &COIN,
                             total_value,
                             true,
                         );
@@ -201,7 +201,7 @@ pub fn build_recipes(world: &mut World) -> Recipes {
                     creation.spawn_stack(
                         &mut commands,
                         global_transform.translation.truncate(),
-                        FOREST_PACK,
+                        &FOREST_PACK,
                         1,
                         true,
                     );
@@ -243,7 +243,7 @@ pub fn build_recipes(world: &mut World) -> Recipes {
                     creation.spawn_stack(
                         &mut commands,
                         global_transform.translation.truncate(),
-                        VILLAGER,
+                        &VILLAGER,
                         1,
                         true,
                     );

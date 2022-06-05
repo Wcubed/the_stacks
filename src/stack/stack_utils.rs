@@ -59,7 +59,7 @@ impl StackCreation {
         &self,
         commands: &mut Commands,
         position: Vec2,
-        card_type: CardType,
+        card_type: &CardType,
         card_amount: usize,
         move_to_empty_space: bool,
     ) {
@@ -79,6 +79,8 @@ impl StackCreation {
     fn spawn_card(&self, commands: &mut Commands, card: &CardType) -> Entity {
         let foreground_color = card.category.text_color();
 
+        let (card_component, description_component) = card.get_card_components();
+
         let entity = commands
             .spawn_bundle(SpriteBundle {
                 texture: self.background.clone(),
@@ -88,7 +90,8 @@ impl StackCreation {
                 },
                 ..default()
             })
-            .insert(card.get_card_component())
+            .insert(card_component)
+            .insert(description_component)
             .with_children(|parent| {
                 // Border
                 parent.spawn_bundle(SpriteBundle {
@@ -154,8 +157,8 @@ impl StackCreation {
             .id();
 
         // Call the custom on_spawn function, if there is one.
-        if let Some(on_spawn) = card.on_spawn {
-            on_spawn(commands, entity);
+        if let Some(func) = card.on_spawn {
+            func(commands, entity)
         }
 
         entity

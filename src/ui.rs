@@ -1,5 +1,5 @@
 use crate::recipe::OngoingRecipe;
-use crate::stack::{Card, CardStack, HoveredCard};
+use crate::stack::{Card, CardDescription, CardStack, HoveredCard};
 use crate::{Speed, TimeSpeed};
 use bevy::prelude::*;
 use bevy_egui::*;
@@ -34,16 +34,16 @@ impl Plugin for UiPlugin {
 
 fn card_info_ui(
     mut context: ResMut<EguiContext>,
-    hovered_card_query: Query<&Card, With<HoveredCard>>,
+    hovered_card_query: Query<(&Card, &CardDescription), With<HoveredCard>>,
 ) {
-    if let Some(hovered_card) = hovered_card_query.iter().next() {
+    if let Some((hovered_card, description)) = hovered_card_query.iter().next() {
         egui::Window::new(hovered_card.title)
             .id(egui::Id::new("Card info window"))
             .fixed_size(CARD_INFO_SIZE)
             .anchor(egui::Align2::LEFT_BOTTOM, CARD_INFO_WINDOW_OFFSET)
             .collapsible(false)
             .show(context.ctx_mut(), |ui| {
-                ui.label(hovered_card.description);
+                ui.label(description.0);
 
                 if hovered_card.value.is_none() {
                     ui.label("Cannot be sold.");

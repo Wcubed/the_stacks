@@ -31,7 +31,6 @@ fn test_hover_system() {
         .insert(Card {
             title: "Test card",
             category: CardCategory::Resource,
-            description: "",
             value: None,
         })
         .push_children(&[hover_overlay])

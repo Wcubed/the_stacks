@@ -103,11 +103,10 @@ pub struct MouseWorldPos(Option<Vec2>);
 #[derive(Deref, DerefMut)]
 pub struct CardVisualSize(pub(crate) Vec2);
 
-#[derive(Component, Clone, Eq, PartialEq)]
+#[derive(Component, Clone, Copy, Eq, PartialEq)]
 pub struct Card {
     pub title: &'static str,
     pub category: CardCategory,
-    pub description: &'static str,
     /// Value on a [CardCategory::SystemCard] means the cost to buy something.
     pub value: Option<usize>,
 }
@@ -117,6 +116,9 @@ impl Card {
         self.title == card_type.title && self.category == card_type.category
     }
 }
+
+#[derive(Component)]
+pub struct CardDescription(pub &'static str);
 
 /// Marks stacks which should have physics applied.
 #[derive(Component)]
@@ -184,14 +186,14 @@ pub fn on_assets_loaded(
 
 pub fn spawn_test_cards(mut commands: Commands, creation: Res<StackCreation>) {
     let top_row_zero = Vec2::new(0., 400.0);
-    creation.spawn_stack(&mut commands, top_row_zero, MARKET, 1, false);
-    creation.spawn_stack(&mut commands, top_row_zero, BUY_FOREST_PACK, 1, false);
+    creation.spawn_stack(&mut commands, top_row_zero, &MARKET, 1, false);
+    creation.spawn_stack(&mut commands, top_row_zero, &BUY_FOREST_PACK, 1, false);
 
-    creation.spawn_stack(&mut commands, Vec2::ZERO, TREE, 3, false);
-    creation.spawn_stack(&mut commands, Vec2::ZERO, VILLAGER, 2, false);
-    creation.spawn_stack(&mut commands, Vec2::ZERO, COIN, 5, false);
-    creation.spawn_stack(&mut commands, Vec2::ZERO, CLAY, 5, false);
-    creation.spawn_stack(&mut commands, Vec2::ZERO, HEARTSTONE, 3, false);
+    creation.spawn_stack(&mut commands, Vec2::ZERO, &TREE, 3, false);
+    creation.spawn_stack(&mut commands, Vec2::ZERO, &VILLAGER, 2, false);
+    creation.spawn_stack(&mut commands, Vec2::ZERO, &COIN, 5, false);
+    creation.spawn_stack(&mut commands, Vec2::ZERO, &CLAY, 5, false);
+    creation.spawn_stack(&mut commands, Vec2::ZERO, &HEARTSTONE, 3, false);
 }
 
 /// Should be added to [PreUpdate](CoreStage::PreUpdate) to make sure the mouse position is

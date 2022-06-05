@@ -1,6 +1,8 @@
+use crate::procedural::SeededHasherResource;
 use crate::recipe::RecipeUses;
-use crate::stack::Card;
+use crate::stack::{Card, CardDescription};
 use bevy::prelude::*;
+use std::hash::{Hash, Hasher};
 
 #[derive(Eq, PartialEq, Clone, Copy)]
 pub enum CardCategory {
@@ -42,6 +44,7 @@ impl CardCategory {
 }
 
 pub struct CardType {
+    // TODO (Wybe 2022-06-05): Make this title an index into some kind of translation system instead.
     pub title: &'static str,
     pub category: CardCategory,
     /// Base cost of this card when sold.
@@ -54,13 +57,30 @@ pub struct CardType {
 }
 
 impl CardType {
-    pub fn get_card_component(&self) -> Card {
-        Card {
-            title: self.title,
-            category: self.category,
-            description: self.description,
-            value: self.value,
-        }
+    pub fn get_card_components(&self) -> (Card, CardDescription) {
+        (
+            Card {
+                title: self.title,
+                category: self.category,
+                value: self.value,
+            },
+            CardDescription(self.description),
+        )
+    }
+}
+
+impl PartialEq<Self> for CardType {
+    /// Only checks the card title, because non-equal cards should be identifiable by their title.
+    fn eq(&self, other: &Self) -> bool {
+        self.title == other.title
+    }
+}
+
+impl Eq for CardType {}
+
+impl Hash for CardType {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write(self.title.as_ref())
     }
 }
 

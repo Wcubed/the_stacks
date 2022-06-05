@@ -8,12 +8,14 @@
 mod camera;
 mod card_packs;
 mod card_types;
+pub mod procedural;
 mod recipe;
 mod stack;
 mod ui;
 
 use crate::camera::*;
 use crate::card_packs::CardPackPlugin;
+use crate::procedural::ProceduralPlugin;
 use crate::recipe::RecipePlugin;
 use crate::stack::StackPlugin;
 use crate::ui::UiPlugin;
@@ -36,6 +38,7 @@ impl Plugin for TheStacksPlugin {
                 UpdateStage::SystemsThatDeleteCards.as_str(),
                 SystemStage::parallel(),
             )
+            .add_plugin(ProceduralPlugin)
             .add_plugin(StackPlugin)
             .add_plugin(CardPackPlugin)
             .add_plugin(RecipePlugin)

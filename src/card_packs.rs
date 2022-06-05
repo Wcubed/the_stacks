@@ -1,8 +1,11 @@
-use crate::card_types::{CardCategory, CardType, TREE};
+use crate::card_types::{CardCategory, CardType, CLAY, TREE};
+use crate::procedural::SeededHasherResource;
 use crate::stack::stack_utils::{delete_cards, StackCreation};
 use crate::stack::{Card, CardStack, HoveredCard};
 use crate::UpdateStage;
 use bevy::prelude::*;
+
+const FOREST_PACK_CONTENT_OPTIONS: &[CardType] = &[TREE, CLAY];
 
 pub(crate) const BUY_FOREST_PACK: CardType = CardType {
     title: "Forest",
@@ -18,10 +21,7 @@ pub(crate) const FOREST_PACK: CardType = CardType {
     category: CardCategory::CardPack,
     description: "Right click to open",
     on_spawn: Some(|commands: &mut Commands, card: Entity| {
-        // TODO (Wybe 2022-05-29): Implement random pack contents.
-        commands
-            .entity(card)
-            .insert(CardPack(vec![TREE, TREE, TREE]));
+        commands.entity(card).insert(CardPack { cards: 3 });
     }),
 };
 
@@ -36,9 +36,11 @@ impl Plugin for CardPackPlugin {
     }
 }
 
-/// Keeps the cards contained in a card pack.
-#[derive(Component, Deref, DerefMut)]
-pub struct CardPack(Vec<CardType>);
+/// Marks card packs.
+#[derive(Component)]
+pub struct CardPack {
+    cards: usize,
+}
 
 /// This system has to go in a system stage that isn't [CoreStage::Update].
 /// This is because it is allowed to remove cards / stacks, which can break other systems
@@ -46,28 +48,44 @@ pub struct CardPack(Vec<CardType>);
 /// TODO (Wybe 2022-05-29): Maybe add a new system stage which has all the systems in it that allow adding or removing cards/stacks.
 pub fn card_pack_open_system(
     mut commands: Commands,
-    mut card_pack_query: Query<(&mut CardPack, &GlobalTransform, &Parent), With<Card>>,
+    mut card_pack_query: Query<(&Card, &mut CardPack, &GlobalTransform, &Parent)>,
     hovered_card_query: Query<Entity, With<HoveredCard>>,
     stacks_query: Query<&CardStack>,
     creation: Res<StackCreation>,
     mouse_input: Res<Input<MouseButton>>,
+    seeded_hasing: Res<SeededHasherResource>,
 ) {
     if mouse_input.just_pressed(MouseButton::Right) {
         for hovered in hovered_card_query.iter() {
-            if let Ok((mut pack, global_transform, root)) = card_pack_query.get_mut(hovered) {
-                // Spawn one card from the card pack.
-                if let Some(new_card) = pack.pop() {
-                    creation.spawn_stack(
-                        &mut commands,
-                        global_transform.translation.truncate(),
-                        new_card,
-                        1,
-                        true,
-                    );
+            if let Ok((card, mut pack, global_transform, root)) = card_pack_query.get_mut(hovered) {
+                if pack.cards > 0 {
+                    let mut rng = seeded_hasing.with(hovered);
+                    rng.with(pack.cards);
+
+                    let new_card = if card.is_type(FOREST_PACK) {
+                        // TODO (Wybe 2022-06-05): randomize.
+                        let card = &FOREST_PACK_CONTENT_OPTIONS
+                            [rng.value_in_range(0..FOREST_PACK_CONTENT_OPTIONS.len())];
+                        Some(card)
+                    } else {
+                        None
+                    };
+
+                    // Spawn one card from the card pack.
+                    if let Some(new_card) = new_card {
+                        creation.spawn_stack(
+                            &mut commands,
+                            global_transform.translation.truncate(),
+                            new_card,
+                            1,
+                            true,
+                        );
+                        pack.cards -= 1;
+                    }
                 }
 
                 // Delete card pack when empty.
-                if pack.is_empty() {
+                if pack.cards == 0 {
                     if let Ok(stack) = stacks_query.get(root.0) {
                         delete_cards(&mut commands, &[hovered], root.0, &stack.0);
                     }
