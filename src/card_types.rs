@@ -44,8 +44,7 @@ impl CardCategory {
 }
 
 pub struct CardType {
-    // TODO (Wybe 2022-06-05): Make this title an index into some kind of translation system instead.
-    pub title: &'static str,
+    pub id: &'static str,
     pub category: CardCategory,
     /// Base cost of this card when sold.
     /// `None` means the card cannot be sold.
@@ -60,7 +59,7 @@ impl CardType {
     pub fn get_card_components(&self) -> (Card, CardDescription) {
         (
             Card {
-                title: self.title,
+                type_id: self.id,
                 category: self.category,
                 value: self.value,
             },
@@ -70,9 +69,9 @@ impl CardType {
 }
 
 impl PartialEq<Self> for CardType {
-    /// Only checks the card title, because non-equal cards should be identifiable by their title.
+    /// Only checks the card id, because non-equal cards should be identifiable by their id.
     fn eq(&self, other: &Self) -> bool {
-        self.title == other.title
+        self.id == other.id
     }
 }
 
@@ -80,12 +79,12 @@ impl Eq for CardType {}
 
 impl Hash for CardType {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        state.write(self.title.as_ref())
+        state.write(self.id.as_ref())
     }
 }
 
 pub(crate) const MARKET: CardType = CardType {
-    title: "Market",
+    id: "market",
     value: None,
     category: CardCategory::SystemCard,
     description: "Sell cards here for coins.",
@@ -95,7 +94,7 @@ pub(crate) const MARKET: CardType = CardType {
 };
 
 pub(crate) const TREE: CardType = CardType {
-    title: "Tree",
+    id: "tree",
     value: Some(0),
     category: CardCategory::Nature,
     description: "A source of logs.",
@@ -105,7 +104,7 @@ pub(crate) const TREE: CardType = CardType {
 };
 
 pub(crate) const CLAY_PATCH: CardType = CardType {
-    title: "Clay Patch",
+    id: "clay_patch",
     value: Some(0),
     category: CardCategory::Nature,
     description: "A slippery piece of ground.",
@@ -115,7 +114,7 @@ pub(crate) const CLAY_PATCH: CardType = CardType {
 };
 
 pub(crate) const CLAY: CardType = CardType {
-    title: "Clay",
+    id: "clay",
     value: Some(1),
     category: CardCategory::Resource,
     description: "Very moldable.\nSome say people are made of this...",
@@ -123,7 +122,7 @@ pub(crate) const CLAY: CardType = CardType {
 };
 
 pub(crate) const LOG: CardType = CardType {
-    title: "Log",
+    id: "log",
     value: Some(1),
     category: CardCategory::Resource,
     description: "A long piece of wood, with the bark still on.",
@@ -131,7 +130,7 @@ pub(crate) const LOG: CardType = CardType {
 };
 
 pub(crate) const PLANK: CardType = CardType {
-    title: "Plank",
+    id: "plank",
     value: Some(2),
     category: CardCategory::Resource,
     description: "Might have splinters.",
@@ -139,7 +138,7 @@ pub(crate) const PLANK: CardType = CardType {
 };
 
 pub(crate) const VILLAGER: CardType = CardType {
-    title: "Villager",
+    id: "villager",
     value: None,
     category: CardCategory::Worker,
     description: "A strong worker.",
@@ -147,7 +146,7 @@ pub(crate) const VILLAGER: CardType = CardType {
 };
 
 pub(crate) const COIN: CardType = CardType {
-    title: "Coin",
+    id: "coin",
     value: None,
     category: CardCategory::Valuable,
     description: "Lifeblood of the village. Literally...",
@@ -155,7 +154,7 @@ pub(crate) const COIN: CardType = CardType {
 };
 
 pub(crate) const APPLE: CardType = CardType {
-    title: "Apple",
+    id: "apple",
     value: Some(1),
     category: CardCategory::Food,
     description: "Rumored to scare doctors",

@@ -29,7 +29,7 @@ fn test_hover_system() {
         .spawn()
         .insert_bundle(TransformBundle::default())
         .insert(Card {
-            title: "Test card",
+            type_id: "Test card",
             category: CardCategory::Resource,
             value: None,
         })

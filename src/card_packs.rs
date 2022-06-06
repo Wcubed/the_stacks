@@ -8,7 +8,7 @@ use bevy::prelude::*;
 const FOREST_PACK_CONTENT_OPTIONS: &[CardType] = &[TREE, CLAY_PATCH];
 
 pub(crate) const BUY_FOREST_PACK: CardType = CardType {
-    title: "Forest",
+    id: "buy_forest_pack",
     value: Some(3),
     category: CardCategory::SystemCard,
     description: "Buy a Forest Pack",
@@ -18,7 +18,7 @@ pub(crate) const BUY_FOREST_PACK: CardType = CardType {
 };
 
 pub(crate) const FOREST_PACK: CardType = CardType {
-    title: "Forest",
+    id: "forest_pack",
     value: None,
     category: CardCategory::CardPack,
     description: "Right click to open",

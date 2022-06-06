@@ -3,9 +3,11 @@ mod tests;
 
 use crate::card_packs::BUY_FOREST_PACK;
 use crate::card_types::{CardCategory, CardType, CLAY, CLAY_PATCH, COIN, MARKET, TREE, VILLAGER};
+use crate::localization::Localizer;
 use crate::recipe::{is_ongoing_recipe_valid_for_stack, OngoingRecipe, Recipes, StackCheck};
 use crate::stack::stack_utils::{
-    spawn_stack, split_stack, stack_visual_size, CARD_VALUE_SPACING_FROM_CARD_EDGE,
+    spawn_stack, split_stack, stack_visual_size, CARD_TITLE_LOCALIZATION_PREFIX,
+    CARD_VALUE_SPACING_FROM_CARD_EDGE,
 };
 use crate::GameState;
 use bevy::math::{const_vec2, const_vec3};
@@ -115,7 +117,8 @@ pub struct CardVisualSize(pub(crate) Vec2);
 
 #[derive(Component, Clone, Copy, Eq, PartialEq)]
 pub struct Card {
-    pub title: &'static str,
+    /// Id that indicates which [CardType] this card was created from.
+    pub type_id: &'static str,
     pub category: CardCategory,
     /// Value on a [CardCategory::SystemCard] means the cost to buy something.
     pub value: Option<usize>,
@@ -123,7 +126,11 @@ pub struct Card {
 
 impl Card {
     pub fn is_type(&self, card_type: &CardType) -> bool {
-        self.title == card_type.title && self.category == card_type.category
+        self.type_id == card_type.id && self.category == card_type.category
+    }
+
+    pub fn localize_title(&self, localizer: &Localizer) -> String {
+        localizer.localize(&(CARD_TITLE_LOCALIZATION_PREFIX.to_owned() + self.type_id))
     }
 }
 
@@ -242,6 +249,7 @@ pub fn stack_creation_system(
     card_images: Res<CardImages>,
     card_fonts: Res<CardFonts>,
     visual_size: Res<CardVisualSize>,
+    localizer: Res<Localizer>,
     mut events: EventReader<CreateStackEvent>,
 ) {
     let title_transform =
@@ -257,12 +265,12 @@ pub fn stack_creation_system(
             continue;
         }
 
-        // Card foreground images are names simply after the title of the card.
+        // Card foreground images are named after the id of the card type.
         // Because of how images work in bevy, it doesn't matter if the expected image doesn't
         // exist, or isn't loaded yet. In that case it simply won't be displayed.
         let foreground_image = image_assets.get_handle(
             CARD_FOREGROUND_IMAGES_PATH.to_owned()
-                + event.card_type.title
+                + event.card_type.id
                 + CARD_FOREGROUND_IMAGES_EXTENSION,
         );
 
@@ -276,6 +284,7 @@ pub fn stack_creation_system(
             title_transform,
             card_value_transform,
             foreground_image,
+            &localizer,
         );
     }
 }

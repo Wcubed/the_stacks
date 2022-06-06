@@ -1,12 +1,12 @@
 use crate::localization::Localizer;
 use crate::recipe::OngoingRecipe;
+use crate::stack::stack_utils::CARD_TITLE_LOCALIZATION_PREFIX;
 use crate::stack::{Card, CardDescription, CardStack, HoveredCard};
 use crate::{LengthOfDay, Speed, TimeOfDay, TimeSpeed};
 use bevy::prelude::*;
 use bevy_egui::egui::ProgressBar;
 use bevy_egui::*;
 use bevy_egui::{EguiContext, EguiPlugin};
-use fluent::FluentArgs;
 
 /// Title height is a guess. Needed to calculate window positions,
 /// because setting the window size does not include the title.
@@ -40,9 +40,10 @@ impl Plugin for UiPlugin {
 fn card_info_ui(
     mut context: ResMut<EguiContext>,
     hovered_card_query: Query<(&Card, &CardDescription), With<HoveredCard>>,
+    localizer: Res<Localizer>,
 ) {
     if let Some((hovered_card, description)) = hovered_card_query.iter().next() {
-        egui::Window::new(hovered_card.title)
+        egui::Window::new(hovered_card.localize_title(&localizer))
             .id(egui::Id::new("Card info window"))
             .fixed_size(CARD_INFO_SIZE)
             .anchor(egui::Align2::LEFT_BOTTOM, CARD_INFO_WINDOW_OFFSET)
@@ -51,7 +52,7 @@ fn card_info_ui(
                 ui.label(description.0);
 
                 if hovered_card.value.is_none() {
-                    ui.label("Cannot be sold.");
+                    ui.label(localizer.localize("ui_cannot_be_sold"));
                 }
 
                 ui.allocate_space(ui.available_size())

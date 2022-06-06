@@ -1,4 +1,5 @@
 use crate::card_types::CardType;
+use crate::localization::Localizer;
 use crate::recipe::OngoingRecipe;
 use crate::stack::{
     CardFonts, CardImages, CardStack, IsCardHoverOverlay, StackLookingForMovementTarget,
@@ -22,6 +23,10 @@ const CARD_BORDER_COLOR: Color = Color::BLACK;
 
 pub const CARD_VALUE_SPACING_FROM_CARD_EDGE: f32 = 10.0;
 
+/// Prefix used in front of the card type id when requesting the localized card title.
+/// For example, a card with id `tree` will have it's localized title stored under `ct_tree`.
+pub const CARD_TITLE_LOCALIZATION_PREFIX: &str = "ct_";
+
 pub fn spawn_stack(
     commands: &mut Commands,
     position: Vec2,
@@ -32,6 +37,7 @@ pub fn spawn_stack(
     title_transform: Transform,
     card_value_transform: Transform,
     foreground_image: Handle<Image>,
+    localizer: &Res<Localizer>,
 ) {
     if card_amount == 0 {
         return;
@@ -41,12 +47,13 @@ pub fn spawn_stack(
         .map(|_| {
             spawn_card(
                 commands,
-                &card_type,
+                card_type,
                 card_images,
                 card_fonts,
                 title_transform,
                 card_value_transform,
                 foreground_image.clone(),
+                localizer,
             )
         })
         .collect();
@@ -64,6 +71,7 @@ fn spawn_card(
     title_transform: Transform,
     card_value_transform: Transform,
     foreground_image: Handle<Image>,
+    localizer: &Res<Localizer>,
 ) -> Entity {
     let foreground_color = card.category.text_color();
 
@@ -94,7 +102,7 @@ fn spawn_card(
             // Title text
             parent.spawn_bundle(Text2dBundle {
                 text: Text::with_section(
-                    card.title,
+                    card_component.localize_title(localizer),
                     TextStyle {
                         font: card_fonts.title.clone(),
                         font_size: CARD_STACK_Y_SPACING,

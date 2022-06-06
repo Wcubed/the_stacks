@@ -52,8 +52,8 @@ impl SeededHasherResource {
 /// // Here we provide a static value, but one could for example provide an entity's id.
 /// let mut hasher = hasher_resource.with(0);
 /// // Each call to `next_value` will provide a different value.
-/// let value1 = hasher.next_value();
-/// let value2 = hasher.next_value();
+/// let value1 = hasher.value();
+/// let value2 = hasher.value();
 ///
 /// assert_ne!(value1, value2);
 /// ```
