@@ -154,6 +154,10 @@ pub struct IsDropTargetOverlay;
 #[derive(Component, Deref, DerefMut)]
 pub struct StackRelativeDragPosition(Vec2);
 
+/// Cards marked with this component cannot be stacked on top of other cards.
+#[derive(Component)]
+pub struct IsExclusiveBottomCard;
+
 /// Indicates a card is being hovered with the mouse.
 #[derive(Component, PartialEq, Debug)]
 pub struct HoveredCard {
@@ -333,6 +337,7 @@ pub fn stack_drop_target_visuals_system(
         With<IsDropTargetOverlay>,
     >,
     card_query: Query<&Card>,
+    exclusive_bottom_cards: Query<&IsExclusiveBottomCard>,
     card_images: Res<CardImages>,
     recipes: Res<Recipes>,
 ) {
@@ -342,11 +347,18 @@ pub fn stack_drop_target_visuals_system(
     if let Some((dragged_stack, dragged_stack_changed, maybe_dragged_stack_recipe)) =
         dragged_stack_query.iter().next()
     {
+        // TODO (Wybe 2022-06-06): Allow selling exclusive bottom cards.
+        if exclusive_bottom_cards.get(dragged_stack[0]).is_ok() {
+            // Exclusive bottom cards don't want to be dropped onto other cards.
+            // TODO (Wybe 2022-06-06): Do this some other way than a pre-mature return.
+            return;
+        }
+
         for (root, stack, stack_changed, maybe_recipe, maybe_recipe_changed) in
             potential_target_stacks_query.iter()
         {
             if drop_target_overlay_query.is_empty() {
-                // Drag just started. Spawn in all overlays
+                // Drag just started. Or this stack is new. Spawn in overlay.
                 let merging_would_break_recipe = would_merging_break_ongoing_recipes(
                     maybe_dragged_stack_recipe,
                     &dragged_stack.0,
@@ -365,7 +377,7 @@ pub fn stack_drop_target_visuals_system(
                     );
                 }
             } else {
-                // Drag ongoing. Update changed stacks.
+                // Stack already has a drag overlay. update it.
                 let recipe_changed = if let Some(recipe_changed) = maybe_recipe_changed {
                     recipe_changed.is_changed() || recipe_changed.is_added()
                 } else {
@@ -588,11 +600,11 @@ pub fn dropped_stack_merging_system(
     mut commands: Commands,
     stack_query: Query<(Entity, &GlobalTransform, &CardStack, Option<&OngoingRecipe>)>,
     card_query: Query<&Card>,
+    exclusive_bottom_cards: Query<&IsExclusiveBottomCard>,
     recipes: Res<Recipes>,
     card_visual_size: Res<CardVisualSize>,
     mut stack_dropped_reader: EventReader<StackDroppedEvent>,
 ) {
-    // TODO (Wybe 2022-05-26): Filter out stacks that were not shown as drop targets.
     for StackDroppedEvent(dropped_stack_root, dropped_global_transform) in
         stack_dropped_reader.iter()
     {
@@ -602,13 +614,15 @@ pub fn dropped_stack_merging_system(
             stack_query.get(*dropped_stack_root).unwrap();
 
         // Find which card we are overlapping the most.
-        // TODO (Wybe 2022-05-14): This should also check if the card we are overlapping is
-        //   a valid target to stack with.
         for (stack_root, stack_global_transform, target_stack, maybe_target_recipe) in
             stack_query.iter()
         {
             if stack_root == *dropped_stack_root {
                 // Cannot drop onto self.
+                continue;
+            }
+            if exclusive_bottom_cards.get(dropped_stack[0]).is_ok() {
+                // Exclusive bottom cards don't want to be dropped onto other cards.
                 continue;
             }
             if would_merging_break_ongoing_recipes(

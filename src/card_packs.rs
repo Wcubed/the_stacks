@@ -1,7 +1,7 @@
 use crate::card_types::{CardCategory, CardType, CLAY, TREE};
 use crate::procedural::SeededHasherResource;
 use crate::stack::stack_utils::{delete_cards, StackCreation};
-use crate::stack::{Card, CardStack, HoveredCard};
+use crate::stack::{Card, CardStack, HoveredCard, IsExclusiveBottomCard};
 use crate::UpdateStage;
 use bevy::prelude::*;
 
@@ -12,7 +12,9 @@ pub(crate) const BUY_FOREST_PACK: CardType = CardType {
     value: Some(3),
     category: CardCategory::SystemCard,
     description: "Buy a Forest Pack",
-    on_spawn: None,
+    on_spawn: Some(|commands: &mut Commands, card: Entity| {
+        commands.entity(card).insert(IsExclusiveBottomCard);
+    }),
 };
 
 pub(crate) const FOREST_PACK: CardType = CardType {

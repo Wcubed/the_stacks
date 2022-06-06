@@ -1,6 +1,6 @@
 use crate::procedural::SeededHasherResource;
 use crate::recipe::RecipeUses;
-use crate::stack::{Card, CardDescription};
+use crate::stack::{Card, CardDescription, IsExclusiveBottomCard};
 use bevy::prelude::*;
 use std::hash::{Hash, Hasher};
 
@@ -89,7 +89,9 @@ pub(crate) const MARKET: CardType = CardType {
     value: None,
     category: CardCategory::SystemCard,
     description: "Sell cards here for coins.",
-    on_spawn: None,
+    on_spawn: Some(|commands: &mut Commands, card: Entity| {
+        commands.entity(card).insert(IsExclusiveBottomCard);
+    }),
 };
 
 pub(crate) const TREE: CardType = CardType {
