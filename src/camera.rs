@@ -7,7 +7,7 @@ use bevy::render::camera::Camera2d;
 /// Mouse wheels are less precise than touchpads, so we scale the zoom when using a scroll wheel.
 const MOUSE_WHEEL_ZOOM_FACTOR: f32 = 0.1;
 const MAX_ZOOMED_OUT_SCALE: f32 = 10.0;
-const MAX_ZOOMED_IN_SCALE: f32 = 2.0;
+const MAX_ZOOMED_IN_SCALE: f32 = 1.0;
 
 const START_ZOOM: f32 = 2.0;
 

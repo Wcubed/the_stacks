@@ -22,8 +22,6 @@ const CARD_BORDER_COLOR: Color = Color::BLACK;
 
 pub const CARD_VALUE_SPACING_FROM_CARD_EDGE: f32 = 10.0;
 
-/// - `move_to_empty_space`: Whether this stack should try moving somewhere relatively empty nearby.
-///   Stacking on top of another, compatible, stack is also considered "moving to empty space".
 pub fn spawn_stack(
     commands: &mut Commands,
     position: Vec2,
@@ -33,6 +31,7 @@ pub fn spawn_stack(
     card_fonts: &Res<CardFonts>,
     title_transform: Transform,
     card_value_transform: Transform,
+    foreground_image: Handle<Image>,
 ) {
     if card_amount == 0 {
         return;
@@ -47,6 +46,7 @@ pub fn spawn_stack(
                 card_fonts,
                 title_transform,
                 card_value_transform,
+                foreground_image.clone(),
             )
         })
         .collect();
@@ -63,6 +63,7 @@ fn spawn_card(
     card_fonts: &Res<CardFonts>,
     title_transform: Transform,
     card_value_transform: Transform,
+    foreground_image: Handle<Image>,
 ) -> Entity {
     let foreground_color = card.category.text_color();
 
@@ -107,6 +108,16 @@ fn spawn_card(
                 transform: title_transform,
                 ..default()
             });
+            // Foreground image
+            parent.spawn_bundle(SpriteBundle {
+                texture: foreground_image,
+                transform: Transform::from_xyz(0.0, 0.0, DELTA_Z),
+                sprite: Sprite {
+                    color: foreground_color,
+                    ..default()
+                },
+                ..default()
+            });
             // Hover overlay
             parent
                 .spawn_bundle(SpriteBundle {
@@ -125,7 +136,7 @@ fn spawn_card(
             if let Some(value) = card.value {
                 parent.spawn_bundle(Text2dBundle {
                     text: Text::with_section(
-                        format!("{} C", value),
+                        format!("{}C", value),
                         TextStyle {
                             font: card_fonts.title.clone(),
                             font_size: CARD_STACK_Y_SPACING,
@@ -151,6 +162,8 @@ fn spawn_card(
     entity
 }
 
+/// - `move_to_empty_space`: Whether this stack should try moving somewhere relatively empty nearby.
+///   Stacking on top of another, compatible, stack is also considered "moving to empty space".
 fn spawn_stack_root(
     commands: &mut Commands,
     position: Vec2,

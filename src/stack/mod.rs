@@ -43,6 +43,9 @@ const STACK_AUTO_MOVEMENT_SPEED: f32 = 2000.0;
 const DROP_TARGET_SCALE_ANIMATION_AMOUNT: f32 = 0.02;
 const DROP_TARGET_SCALE_ANIMATION_SPEED: f32 = 4.0;
 
+const CARD_FOREGROUND_IMAGES_PATH: &str = "vector_images/card_foreground_images/";
+const CARD_FOREGROUND_IMAGES_EXTENSION: &str = ".png";
+
 pub struct StackPlugin;
 
 impl Plugin for StackPlugin {
@@ -93,8 +96,8 @@ pub struct CardImages {
     pub stack_drop_target: Handle<Image>,
     /// this entry is here so the card type images get loaded. But this is not used to reference
     /// the images. That is done by doing `.get("path.png")` on the Image assets resource.
-    #[asset(path = "vector_images/card_type_images", folder(typed))]
-    pub _card_type_images: Vec<Handle<Image>>,
+    #[asset(path = "vector_images/card_foreground_images", folder(typed))]
+    pub _card_foreground_images: Vec<Handle<Image>>,
 }
 
 #[derive(AssetCollection)]
@@ -189,7 +192,6 @@ pub struct CardPickedUpEvent(Entity);
 pub fn on_assets_loaded(
     mut commands: Commands,
     card_images: Res<CardImages>,
-    card_fonts: Res<CardFonts>,
     images: Res<Assets<Image>>,
 ) {
     // Can call `unwrap()` because the asset_loader will have caught any missing assets already.
@@ -239,6 +241,7 @@ pub fn spawn_test_cards(mut commands: Commands, mut creation: EventWriter<Create
 
 pub fn stack_creation_system(
     mut commands: Commands,
+    image_assets: Res<Assets<Image>>,
     card_images: Res<CardImages>,
     card_fonts: Res<CardFonts>,
     visual_size: Res<CardVisualSize>,
@@ -257,6 +260,15 @@ pub fn stack_creation_system(
             continue;
         }
 
+        // Card foreground images are names simply after the title of the card.
+        // Because of how images work in bevy, it doesn't matter if the expected image doesn't
+        // exist, or isn't loaded yet. In that case it simply won't be displayed.
+        let foreground_image = image_assets.get_handle(
+            CARD_FOREGROUND_IMAGES_PATH.to_owned()
+                + event.card_type.title
+                + CARD_FOREGROUND_IMAGES_EXTENSION,
+        );
+
         spawn_stack(
             &mut commands,
             event.position,
@@ -266,6 +278,7 @@ pub fn stack_creation_system(
             &card_fonts,
             title_transform,
             card_value_transform,
+            foreground_image,
         );
     }
 }
