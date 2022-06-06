@@ -2,8 +2,8 @@ pub mod stack_utils;
 mod tests;
 
 use crate::card_packs::BUY_FOREST_PACK;
-use crate::card_types::{CardCategory, CardType, CLAY, COIN, HEARTSTONE, MARKET, TREE, VILLAGER};
-use crate::recipe::{is_ongoing_recipe_valid_for_stack, OngoingRecipe, Recipes};
+use crate::card_types::{CardCategory, CardType, CLAY, COIN, MARKET, TREE, VILLAGER};
+use crate::recipe::{is_ongoing_recipe_valid_for_stack, OngoingRecipe, Recipes, StackCheck};
 use crate::stack::stack_utils::{
     spawn_stack, split_stack, stack_visual_size, CARD_VALUE_SPACING_FROM_CARD_EDGE,
 };
@@ -122,7 +122,7 @@ pub struct Card {
 }
 
 impl Card {
-    pub fn is_type(&self, card_type: CardType) -> bool {
+    pub fn is_type(&self, card_type: &CardType) -> bool {
         self.title == card_type.title && self.category == card_type.category
     }
 }
@@ -231,11 +231,6 @@ pub fn spawn_test_cards(mut commands: Commands, mut creation: EventWriter<Create
         position: Vec2::ZERO,
         card_type: &CLAY,
         amount: 5,
-    });
-    creation.send(CreateStackEvent {
-        position: Vec2::ZERO,
-        card_type: &HEARTSTONE,
-        amount: 3,
     });
 }
 
@@ -527,19 +522,21 @@ fn would_merging_break_ongoing_recipes(
     let mut merged_stack = target_stack.to_owned();
     merged_stack.extend(dropped_stack);
 
-    let cards: Vec<&Card> = merged_stack
+    let cards: Vec<Card> = merged_stack
         .iter()
         .filter_map(|&e| card_query.get(e).ok())
+        .copied()
         .collect();
+    let stack_check = StackCheck(cards);
 
     if maybe_dropped_recipe.is_some()
-        && !is_ongoing_recipe_valid_for_stack(maybe_dropped_recipe, &cards, recipes)
+        && !is_ongoing_recipe_valid_for_stack(maybe_dropped_recipe, &stack_check, recipes)
     {
         // Breaks recipe of the dropped stack.
         return true;
     }
     if maybe_target_recipe.is_some()
-        && !is_ongoing_recipe_valid_for_stack(maybe_target_recipe, &cards, recipes)
+        && !is_ongoing_recipe_valid_for_stack(maybe_target_recipe, &stack_check, recipes)
     {
         // Breaks recipe on the target stack.
         return true;

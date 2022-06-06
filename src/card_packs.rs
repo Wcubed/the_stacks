@@ -64,7 +64,7 @@ pub fn card_pack_open_system(
                     let mut rng = seeded_hasing.with(hovered);
                     rng.with(pack.cards);
 
-                    let new_card = if card.is_type(FOREST_PACK) {
+                    let new_card = if card.is_type(&FOREST_PACK) {
                         // TODO (Wybe 2022-06-05): randomize.
                         let card = &FOREST_PACK_CONTENT_OPTIONS
                             [rng.value_in_range(0..FOREST_PACK_CONTENT_OPTIONS.len())];

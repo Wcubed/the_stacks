@@ -128,14 +128,6 @@ pub(crate) const PLANK: CardType = CardType {
     on_spawn: None,
 };
 
-pub(crate) const HEARTSTONE: CardType = CardType {
-    title: "Heartstone",
-    value: Some(5),
-    category: CardCategory::Gem,
-    description: "Brimming with life!",
-    on_spawn: None,
-};
-
 pub(crate) const VILLAGER: CardType = CardType {
     title: "Villager",
     value: None,
@@ -148,7 +140,7 @@ pub(crate) const COIN: CardType = CardType {
     title: "Coin",
     value: None,
     category: CardCategory::Valuable,
-    description: "Buy stuff with this. Shiny.",
+    description: "Lifeblood of the village. Literally...",
     on_spawn: None,
 };
 

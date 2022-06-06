@@ -1,5 +1,6 @@
 mod recipe_defines;
 
+use crate::card_types::{CardCategory, CardType};
 use crate::stack::{Card, CardStack, CardVisualSize, DELTA_Z, STACK_DRAG_Z};
 use crate::{is_time_running, GameState, TimeSpeed};
 use bevy::ecs::event::Events;
@@ -95,7 +96,7 @@ impl<'a> RecipesBuilder<'a> {
     pub fn with_instant_recipe<Params>(
         mut self,
         name: &'static str,
-        valid_callback: fn(&[&Card]) -> bool,
+        valid_callback: fn(&StackCheck) -> bool,
         finished_system: impl IntoSystem<(), (), Params> + 'static,
     ) -> Self {
         self.new_recipe(name, None, valid_callback, finished_system);
@@ -106,7 +107,7 @@ impl<'a> RecipesBuilder<'a> {
         mut self,
         name: &'static str,
         seconds: f32,
-        valid_callback: fn(&[&Card]) -> bool,
+        valid_callback: fn(&StackCheck) -> bool,
         finished_system: impl IntoSystem<(), (), Params> + 'static,
     ) -> Self {
         self.new_recipe(name, Some(seconds), valid_callback, finished_system);
@@ -118,7 +119,7 @@ impl<'a> RecipesBuilder<'a> {
         // TODO (Wybe 2022-06-05): Use these names as indexes into some sort of translation file.
         name: &'static str,
         seconds: Option<f32>,
-        valid_callback: fn(&[&Card]) -> bool,
+        valid_callback: fn(&StackCheck) -> bool,
         finished_system: impl IntoSystem<(), (), Params> + 'static,
     ) {
         let mut boxed_system = Box::new(IntoSystem::into_system(finished_system));
@@ -150,7 +151,7 @@ pub struct Recipe {
     pub seconds: Option<f32>,
     /// This callback is called when cards are added or removed from stacks.
     /// Should return `true` if the given stack contents are valid for this recipe.
-    pub is_valid: fn(&[&Card]) -> bool,
+    pub is_valid: fn(&StackCheck) -> bool,
     /// System that applies the effects of a recipe.
     /// Only called a maximum of once per frame.
     /// The stacks that need to be handled will be indicated by a [FinishRecipeMarker].
@@ -160,6 +161,32 @@ pub struct Recipe {
     /// Do not worry about leaving a [FinishRecipeMarker] lying around,
     /// it will be cleaned up automatically.
     finish_system: Box<dyn System<In = (), Out = ()>>,
+}
+
+/// Convenience structure passed to the `is_valid` function of [Recipe]s, for checking various info about a stack.
+#[derive(Deref)]
+pub struct StackCheck(pub Vec<Card>);
+
+impl StackCheck {
+    fn bottom_card_is_type(&self, card_type: CardType) -> bool {
+        if let Some(card) = self.0.get(0) {
+            card.is_type(&card_type)
+        } else {
+            false
+        }
+    }
+
+    fn contains_exactly_one_of_type(&self, card_type: CardType) -> bool {
+        self.0.iter().filter(|&c| c.is_type(&card_type)).count() == 1
+    }
+
+    fn contains_n_of_type(&self, card_type: CardType, amount: usize) -> bool {
+        self.0.iter().filter(|&c| c.is_type(&card_type)).count() == amount
+    }
+
+    fn contains_exactly_one_of_category(&self, category: CardCategory) -> bool {
+        self.0.iter().filter(|&c| c.category == category).count() == 1
+    }
 }
 
 /// Checks whether stacks are valid recipes or not.
@@ -187,14 +214,19 @@ pub fn recipe_check_system(
             continue;
         }
 
-        let cards_in_stack: Vec<&Card> = stack.iter().map(|&e| cards.get(e).unwrap()).collect();
+        let cards_in_stack: Vec<Card> = stack
+            .iter()
+            .filter_map(|&e| cards.get(e).ok())
+            .copied()
+            .collect();
+        let stack_check = StackCheck(cards_in_stack);
 
         let mut recipe_found =
-            is_ongoing_recipe_valid_for_stack(maybe_ongoing_recipe, &cards_in_stack, &recipes);
+            is_ongoing_recipe_valid_for_stack(maybe_ongoing_recipe, &stack_check, &recipes);
 
         if !recipe_found {
             for (&id, recipe) in recipes.iter() {
-                if (recipe.is_valid)(&cards_in_stack) {
+                if (recipe.is_valid)(&stack_check) {
                     if let Some(seconds) = recipe.seconds {
                         commands.entity(root).insert(OngoingRecipe {
                             id,
@@ -220,11 +252,11 @@ pub fn recipe_check_system(
 
 pub fn is_ongoing_recipe_valid_for_stack(
     maybe_ongoing: Option<&OngoingRecipe>,
-    stack: &[&Card],
+    stack_check: &StackCheck,
     recipes: &Res<Recipes>,
 ) -> bool {
     if let Some(recipe) = maybe_ongoing.and_then(|r| recipes.get(&r.id)) {
-        (recipe.is_valid)(stack)
+        (recipe.is_valid)(stack_check)
     } else {
         false
     }

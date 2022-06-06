@@ -1,6 +1,6 @@
 use crate::card_packs::{BUY_FOREST_PACK, FOREST_PACK};
-use crate::card_types::CardCategory::{SystemCard, Worker};
-use crate::card_types::{CLAY, COIN, HEARTSTONE, LOG, MARKET, PLANK, TREE, VILLAGER};
+use crate::card_types::CardCategory;
+use crate::card_types::{CLAY, COIN, LOG, MARKET, PLANK, TREE, VILLAGER};
 use crate::recipe::{FinishRecipeMarker, RecipeUses, Recipes, RecipesBuilder};
 use crate::stack::stack_utils::delete_cards;
 use crate::stack::{Card, CardStack, CreateStackEvent};
@@ -12,13 +12,9 @@ pub fn build_recipes(world: &mut World) -> Recipes {
             "Cutting tree",
             2.,
             |cards| {
-                // Top card is a worker, and the rest is trees.
-                cards
-                    .iter()
-                    .last()
-                    .filter(|c| c.category == Worker)
-                    .is_some()
-                    && cards.iter().filter(|c| c.is_type(TREE)).count() == cards.len() - 1
+                // Contains only trees and workers
+                cards.contains_exactly_one_of_category(CardCategory::Worker)
+                    && cards.contains_n_of_type(TREE, cards.len() - 1)
                     && cards.len() > 1
             },
             |mut commands: Commands,
@@ -31,7 +27,7 @@ pub fn build_recipes(world: &mut World) -> Recipes {
                 for (root, stack, global_transform) in recipe_stack_query.iter() {
                     for &card_entity in stack.iter() {
                         if let Ok((card, mut uses)) = card_query.get_mut(card_entity) {
-                            if card.is_type(TREE) {
+                            if card.is_type(&TREE) {
                                 // The recipe consumes 1 use of a tree.
                                 if uses.0 == 1 {
                                     delete_cards(&mut commands, &[card_entity], root, stack);
@@ -56,8 +52,8 @@ pub fn build_recipes(world: &mut World) -> Recipes {
             3.,
             |cards| {
                 cards.len() == 2
-                    && cards.iter().any(|c| c.is_type(LOG))
-                    && cards.iter().any(|c| c.category == Worker)
+                    && cards.contains_exactly_one_of_type(LOG)
+                    && cards.contains_exactly_one_of_category(CardCategory::Worker)
             },
             |mut commands: Commands,
              recipe_stack_query: Query<
@@ -69,7 +65,7 @@ pub fn build_recipes(world: &mut World) -> Recipes {
                 for (root, stack, global_transform) in recipe_stack_query.iter() {
                     for &card_entity in stack.iter() {
                         if let Ok(card) = card_query.get(card_entity) {
-                            if card.is_type(LOG) {
+                            if card.is_type(&LOG) {
                                 // The recipe consumes a single log.
                                 delete_cards(&mut commands, &[card_entity], root, stack);
 
@@ -90,10 +86,10 @@ pub fn build_recipes(world: &mut World) -> Recipes {
             |cards| {
                 // Bottom card is a market, and there are sellable cards.
                 // SystemCards are never sellable.
-                cards.first().filter(|c| c.is_type(MARKET)).is_some()
+                cards.bottom_card_is_type(MARKET)
                     && cards
                         .iter()
-                        .any(|c| c.value.is_some() && c.category != SystemCard)
+                        .any(|c| c.value.is_some() && c.category != CardCategory::SystemCard)
             },
             |mut commands: Commands,
              recipe_stack_query: Query<
@@ -110,7 +106,7 @@ pub fn build_recipes(world: &mut World) -> Recipes {
                         .iter()
                         .filter_map(|&entity| {
                             if let Ok(card) = card_query.get(entity) {
-                                if card.category == SystemCard {
+                                if card.category == CardCategory::SystemCard {
                                     // System cards can never be sold.
                                     return None;
                                 }
@@ -147,14 +143,14 @@ pub fn build_recipes(world: &mut World) -> Recipes {
                 // Bottom card is one of the card pack buy cards, and there are enough coins.
 
                 let bottom_card = cards.first().unwrap();
-                let cost = if bottom_card.is_type(BUY_FOREST_PACK) {
+                let cost = if bottom_card.is_type(&BUY_FOREST_PACK) {
                     bottom_card.value.unwrap()
                 } else {
                     // Card is not one of the cards that allow buying packs.
                     return false;
                 };
                 // Enough coins?
-                cards.iter().filter(|c| c.is_type(COIN)).count() >= cost
+                cards.iter().filter(|c| c.is_type(&COIN)).count() >= cost
             },
             |mut commands: Commands,
              recipe_stack_query: Query<
@@ -170,7 +166,7 @@ pub fn build_recipes(world: &mut World) -> Recipes {
                         .iter()
                         .filter_map(|&entity| {
                             if let Ok(card) = card_query.get(entity) {
-                                if card.is_type(COIN) {
+                                if card.is_type(&COIN) {
                                     Some(entity)
                                 } else {
                                     None
@@ -204,11 +200,11 @@ pub fn build_recipes(world: &mut World) -> Recipes {
             "Creating Villager",
             5.0,
             |cards| {
-                // 1 of a worker category, 2 clay and 1 heartstone
-                cards.len() == 4
-                    && cards.iter().any(|c| c.category == Worker)
-                    && cards.iter().filter(|c| c.is_type(CLAY)).count() == 2
-                    && cards.iter().any(|c| c.is_type(HEARTSTONE))
+                // 1 of a worker category, 2 clay and 2 coins
+                cards.len() == 5
+                    && cards.contains_exactly_one_of_category(CardCategory::Worker)
+                    && cards.contains_n_of_type(CLAY, 2)
+                    && cards.contains_n_of_type(COIN, 2)
             },
             |mut commands: Commands,
              recipe_stack_query: Query<
@@ -224,10 +220,10 @@ pub fn build_recipes(world: &mut World) -> Recipes {
                             card_query
                                 .get(e)
                                 .ok()
-                                .map(|c| c.is_type(CLAY) || c.is_type(HEARTSTONE))
+                                .map(|c| c.is_type(&CLAY) || c.is_type(&COIN))
                                 .unwrap_or(false)
                         })
-                        .map(|e| *e)
+                        .copied()
                         .collect();
 
                     delete_cards(&mut commands, &cards_to_be_deleted, root, stack);
