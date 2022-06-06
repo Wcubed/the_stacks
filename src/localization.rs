@@ -154,9 +154,13 @@ fn load_language_file(
         .expect("Parsing language identifier failed");
 
     let mut bundle = FluentBundle::new_concurrent(vec![id.clone()]);
-    bundle
-        .add_resource(Arc::new(resource))
-        .map_err(|_| "Failed to add localization resources to the bundle".to_string())?;
+    bundle.add_resource(Arc::new(resource)).map_err(|errors| {
+        errors
+            .iter()
+            .enumerate()
+            .map(|(i, err)| format!("\n{}: {:?}", i, err))
+            .collect::<String>()
+    })?;
 
     Ok((id, bundle))
 }

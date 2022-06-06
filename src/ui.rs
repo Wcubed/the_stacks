@@ -1,7 +1,6 @@
 use crate::localization::Localizer;
 use crate::recipe::OngoingRecipe;
-use crate::stack::stack_utils::CARD_TITLE_LOCALIZATION_PREFIX;
-use crate::stack::{Card, CardDescription, CardStack, HoveredCard};
+use crate::stack::{Card, CardStack, HoveredCard};
 use crate::{LengthOfDay, Speed, TimeOfDay, TimeSpeed};
 use bevy::prelude::*;
 use bevy_egui::egui::ProgressBar;
@@ -39,17 +38,17 @@ impl Plugin for UiPlugin {
 
 fn card_info_ui(
     mut context: ResMut<EguiContext>,
-    hovered_card_query: Query<(&Card, &CardDescription), With<HoveredCard>>,
+    hovered_card_query: Query<&Card, With<HoveredCard>>,
     localizer: Res<Localizer>,
 ) {
-    if let Some((hovered_card, description)) = hovered_card_query.iter().next() {
+    if let Some(hovered_card) = hovered_card_query.iter().next() {
         egui::Window::new(hovered_card.localize_title(&localizer))
             .id(egui::Id::new("Card info window"))
             .fixed_size(CARD_INFO_SIZE)
             .anchor(egui::Align2::LEFT_BOTTOM, CARD_INFO_WINDOW_OFFSET)
             .collapsible(false)
             .show(context.ctx_mut(), |ui| {
-                ui.label(description.0);
+                ui.label(hovered_card.localize_description(&localizer));
 
                 if hovered_card.value.is_none() {
                     ui.label(localizer.localize("ui_cannot_be_sold"));
@@ -110,15 +109,18 @@ fn game_speed_ui(
                     .on_hover_text("[3]");
 
                 let seconds_left_in_day = (1.0 - time_of_day.time_of_day) * length_of_day.0;
-
                 let day_string = localizer
                     .localize_with_args("ui_current_day", &[("day", &time_of_day.day.to_string())]);
+                let seconds_left_in_day_string = localizer.localize_with_args(
+                    "ui_seconds_left_in_day",
+                    &[("seconds", &format!("{:.0}", seconds_left_in_day))],
+                );
 
                 let day_progress = ProgressBar::new(time_of_day.time_of_day)
                     .desired_width(DAY_PROGRESS_BAR_WIDTH)
                     .text(day_string);
                 ui.add(day_progress)
-                    .on_hover_text(format!("{:.1} seconds left", seconds_left_in_day));
+                    .on_hover_text(seconds_left_in_day_string);
             });
         });
 }

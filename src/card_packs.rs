@@ -11,7 +11,6 @@ pub(crate) const BUY_FOREST_PACK: CardType = CardType {
     id: "buy_forest_pack",
     value: Some(3),
     category: CardCategory::SystemCard,
-    description: "Buy a Forest Pack",
     on_spawn: Some(|commands: &mut Commands, card: Entity| {
         commands.entity(card).insert(IsExclusiveBottomCard);
     }),
@@ -21,7 +20,6 @@ pub(crate) const FOREST_PACK: CardType = CardType {
     id: "forest_pack",
     value: None,
     category: CardCategory::CardPack,
-    description: "Right click to open",
     on_spawn: Some(|commands: &mut Commands, card: Entity| {
         commands.entity(card).insert(CardPack { cards: 3 });
     }),

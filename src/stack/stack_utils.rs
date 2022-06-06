@@ -26,6 +26,9 @@ pub const CARD_VALUE_SPACING_FROM_CARD_EDGE: f32 = 10.0;
 /// Prefix used in front of the card type id when requesting the localized card title.
 /// For example, a card with id `tree` will have it's localized title stored under `ct_tree`.
 pub const CARD_TITLE_LOCALIZATION_PREFIX: &str = "ct_";
+/// Prefix used in front of the card type id when requesting the localized card title.
+/// For example, a card with id `tree` will have it's localized description stored under `cd_tree`.
+pub const CARD_DESCRIPTION_LOCALIZATION_PREFIX: &str = "cd_";
 
 pub fn spawn_stack(
     commands: &mut Commands,
@@ -75,7 +78,7 @@ fn spawn_card(
 ) -> Entity {
     let foreground_color = card.category.text_color();
 
-    let (card_component, description_component) = card.get_card_components();
+    let card_component = card.get_card_component();
 
     let entity = commands
         .spawn_bundle(SpriteBundle {
@@ -87,7 +90,6 @@ fn spawn_card(
             ..default()
         })
         .insert(card_component)
-        .insert(description_component)
         .with_children(|parent| {
             // Border
             parent.spawn_bundle(SpriteBundle {

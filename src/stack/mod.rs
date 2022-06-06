@@ -6,8 +6,8 @@ use crate::card_types::{CardCategory, CardType, CLAY, CLAY_PATCH, COIN, MARKET, 
 use crate::localization::Localizer;
 use crate::recipe::{is_ongoing_recipe_valid_for_stack, OngoingRecipe, Recipes, StackCheck};
 use crate::stack::stack_utils::{
-    spawn_stack, split_stack, stack_visual_size, CARD_TITLE_LOCALIZATION_PREFIX,
-    CARD_VALUE_SPACING_FROM_CARD_EDGE,
+    spawn_stack, split_stack, stack_visual_size, CARD_DESCRIPTION_LOCALIZATION_PREFIX,
+    CARD_TITLE_LOCALIZATION_PREFIX, CARD_VALUE_SPACING_FROM_CARD_EDGE,
 };
 use crate::GameState;
 use bevy::math::{const_vec2, const_vec3};
@@ -132,10 +132,11 @@ impl Card {
     pub fn localize_title(&self, localizer: &Localizer) -> String {
         localizer.localize(&(CARD_TITLE_LOCALIZATION_PREFIX.to_owned() + self.type_id))
     }
-}
 
-#[derive(Component)]
-pub struct CardDescription(pub &'static str);
+    pub fn localize_description(&self, localizer: &Localizer) -> String {
+        localizer.localize(&(CARD_DESCRIPTION_LOCALIZATION_PREFIX.to_owned() + self.type_id))
+    }
+}
 
 /// Marks stacks which should have physics applied.
 #[derive(Component)]
