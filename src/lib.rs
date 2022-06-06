@@ -137,10 +137,12 @@ fn time_of_day_progress_system(
     length_of_day: Res<LengthOfDay>,
     time: Res<Time>,
 ) {
-    days.time_of_day += (time.delta_seconds() * speed.as_factor()) / length_of_day.0;
-    if days.time_of_day >= 1.0 {
-        days.time_of_day -= 1.0;
-        days.day += 1;
+    if speed.running {
+        days.time_of_day += (time.delta_seconds() * speed.as_factor()) / length_of_day.0;
+        if days.time_of_day >= 1.0 {
+            days.time_of_day -= 1.0;
+            days.day += 1;
+        }
     }
 }
 
