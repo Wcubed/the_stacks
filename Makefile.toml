@@ -1,5 +1,5 @@
 [env]
-VECTOR_IMAGES = { glob = "assets/vector_images/*.svg" }
+VECTOR_IMAGES = { glob = "assets/vector_images/**/*.svg" }
 
 [tasks.pre-build]
 dependencies = [

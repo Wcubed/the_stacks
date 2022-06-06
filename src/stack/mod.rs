@@ -4,7 +4,9 @@ mod tests;
 use crate::card_packs::BUY_FOREST_PACK;
 use crate::card_types::{CardCategory, CardType, CLAY, COIN, HEARTSTONE, MARKET, TREE, VILLAGER};
 use crate::recipe::{is_ongoing_recipe_valid_for_stack, OngoingRecipe, Recipes};
-use crate::stack::stack_utils::{split_stack, stack_visual_size};
+use crate::stack::stack_utils::{
+    spawn_stack, split_stack, stack_visual_size, CARD_VALUE_SPACING_FROM_CARD_EDGE,
+};
 use crate::GameState;
 use bevy::math::{const_vec2, const_vec3};
 use bevy::prelude::*;
@@ -12,7 +14,7 @@ use bevy::render::camera::Camera2d;
 use bevy_asset_loader::{AssetCollection, AssetLoader};
 use stack_utils::{
     get_semi_random_stack_root_z, global_center_of_top_card, merge_stacks,
-    relative_center_of_nth_card_in_stack, StackCreation, CARD_STACK_Y_SPACING, STACK_ROOT_Z_RANGE,
+    relative_center_of_nth_card_in_stack, CARD_STACK_Y_SPACING, STACK_ROOT_Z_RANGE,
 };
 use std::collections::HashSet;
 
@@ -53,9 +55,9 @@ impl Plugin for StackPlugin {
 
         app.add_event::<StackDroppedEvent>()
             .add_event::<CardPickedUpEvent>()
+            .add_event::<CreateStackEvent>()
             .insert_resource(MouseWorldPos(None))
             .insert_resource(CardVisualSize(Vec2::ONE))
-            .insert_resource(StackCreation::default())
             .add_system_to_stage(CoreStage::PreUpdate, mouse_world_pos_update_system)
             .add_system_set(
                 SystemSet::on_exit(GameState::AssetLoading).with_system(on_assets_loaded),
@@ -63,6 +65,7 @@ impl Plugin for StackPlugin {
             .add_system_set(SystemSet::on_enter(GameState::Run).with_system(spawn_test_cards))
             .add_system_set(
                 SystemSet::on_update(GameState::Run)
+                    .with_system(stack_creation_system)
                     .with_system(stack_mouse_drag_system)
                     .with_system(stack_drop_target_visuals_system)
                     .with_system(stack_drop_overlay_animation_system)
@@ -88,6 +91,10 @@ pub struct CardImages {
     pub hover_overlay: Handle<Image>,
     #[asset(path = "vector_images/stack_drop_target.png")]
     pub stack_drop_target: Handle<Image>,
+    /// this entry is here so the card type images get loaded. But this is not used to reference
+    /// the images. That is done by doing `.get("path.png")` on the Image assets resource.
+    #[asset(path = "vector_images/card_type_images", folder(typed))]
+    pub _card_type_images: Vec<Handle<Image>>,
 }
 
 #[derive(AssetCollection)]
@@ -164,6 +171,14 @@ pub struct HoveredCard {
     relative_hover_pos: Vec2,
 }
 
+/// Event that indicates a stack should be created.
+/// Is picked up by the `stack_creation_system`.
+pub struct CreateStackEvent {
+    pub(crate) position: Vec2,
+    pub(crate) card_type: &'static CardType,
+    pub(crate) amount: usize,
+}
+
 /// Event sent by the [card_mouse_drag_system] when the user drops a card.
 /// Contains the stack root entity, and it's global transform upon being dropped.
 pub struct StackDroppedEvent(Entity, GlobalTransform);
@@ -180,24 +195,79 @@ pub fn on_assets_loaded(
     // Can call `unwrap()` because the asset_loader will have caught any missing assets already.
     let card_background = images.get(card_images.background.clone()).unwrap();
     commands.insert_resource(CardVisualSize(card_background.size()));
-
-    commands.insert_resource(StackCreation::new(
-        &card_images,
-        &card_fonts,
-        card_background.size(),
-    ));
 }
 
-pub fn spawn_test_cards(mut commands: Commands, creation: Res<StackCreation>) {
+pub fn spawn_test_cards(mut commands: Commands, mut creation: EventWriter<CreateStackEvent>) {
     let top_row_zero = Vec2::new(0., 400.0);
-    creation.spawn_stack(&mut commands, top_row_zero, &MARKET, 1, false);
-    creation.spawn_stack(&mut commands, top_row_zero, &BUY_FOREST_PACK, 1, false);
+    creation.send(CreateStackEvent {
+        position: top_row_zero,
+        card_type: &MARKET,
+        amount: 1,
+    });
+    creation.send(CreateStackEvent {
+        position: top_row_zero,
+        card_type: &BUY_FOREST_PACK,
+        amount: 1,
+    });
 
-    creation.spawn_stack(&mut commands, Vec2::ZERO, &TREE, 3, false);
-    creation.spawn_stack(&mut commands, Vec2::ZERO, &VILLAGER, 2, false);
-    creation.spawn_stack(&mut commands, Vec2::ZERO, &COIN, 5, false);
-    creation.spawn_stack(&mut commands, Vec2::ZERO, &CLAY, 5, false);
-    creation.spawn_stack(&mut commands, Vec2::ZERO, &HEARTSTONE, 3, false);
+    creation.send(CreateStackEvent {
+        position: Vec2::ZERO,
+        card_type: &TREE,
+        amount: 3,
+    });
+    creation.send(CreateStackEvent {
+        position: Vec2::ZERO,
+        card_type: &VILLAGER,
+        amount: 2,
+    });
+    creation.send(CreateStackEvent {
+        position: Vec2::ZERO,
+        card_type: &COIN,
+        amount: 3,
+    });
+    creation.send(CreateStackEvent {
+        position: Vec2::ZERO,
+        card_type: &CLAY,
+        amount: 5,
+    });
+    creation.send(CreateStackEvent {
+        position: Vec2::ZERO,
+        card_type: &HEARTSTONE,
+        amount: 3,
+    });
+}
+
+pub fn stack_creation_system(
+    mut commands: Commands,
+    card_images: Res<CardImages>,
+    card_fonts: Res<CardFonts>,
+    visual_size: Res<CardVisualSize>,
+    mut events: EventReader<CreateStackEvent>,
+) {
+    let title_transform =
+        Transform::from_xyz(0., 0.5 * (visual_size.y - CARD_STACK_Y_SPACING), DELTA_Z);
+    let card_value_transform = Transform::from_xyz(
+        -0.5 * visual_size.x + CARD_VALUE_SPACING_FROM_CARD_EDGE,
+        -0.5 * visual_size.y + CARD_VALUE_SPACING_FROM_CARD_EDGE,
+        DELTA_Z,
+    );
+
+    for event in events.iter() {
+        if event.amount == 0 {
+            continue;
+        }
+
+        spawn_stack(
+            &mut commands,
+            event.position,
+            event.card_type,
+            event.amount,
+            &card_images,
+            &card_fonts,
+            title_transform,
+            card_value_transform,
+        );
+    }
 }
 
 /// Should be added to [PreUpdate](CoreStage::PreUpdate) to make sure the mouse position is

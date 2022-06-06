@@ -20,176 +20,162 @@ pub const STACK_ROOT_Z_RANGE: Range<f32> = 1.0..100.0;
 const CARD_HOVER_OVERLAY_COLOR: Color = Color::rgba(1., 1., 1., 0.1);
 const CARD_BORDER_COLOR: Color = Color::BLACK;
 
-const CARD_VALUE_SPACING_FROM_CARD_EDGE: f32 = 10.0;
+pub const CARD_VALUE_SPACING_FROM_CARD_EDGE: f32 = 10.0;
 
-/// Resource that contains everything needed to create new cards.
-#[derive(Default)]
-pub struct StackCreation {
-    background: Handle<Image>,
-    border: Handle<Image>,
-    hover_overlay: Handle<Image>,
-    title_font: Handle<Font>,
+/// - `move_to_empty_space`: Whether this stack should try moving somewhere relatively empty nearby.
+///   Stacking on top of another, compatible, stack is also considered "moving to empty space".
+pub fn spawn_stack(
+    commands: &mut Commands,
+    position: Vec2,
+    card_type: &CardType,
+    card_amount: usize,
+    card_images: &Res<CardImages>,
+    card_fonts: &Res<CardFonts>,
     title_transform: Transform,
     card_value_transform: Transform,
+) {
+    if card_amount == 0 {
+        return;
+    }
+
+    let entities: Vec<Entity> = (0..card_amount)
+        .map(|_| {
+            spawn_card(
+                commands,
+                &card_type,
+                card_images,
+                card_fonts,
+                title_transform,
+                card_value_transform,
+            )
+        })
+        .collect();
+
+    spawn_stack_root(commands, position, &entities, true);
+    set_stack_card_transforms(commands, &entities);
 }
 
-impl StackCreation {
-    pub fn new(images: &CardImages, fonts: &CardFonts, visual_size: Vec2) -> Self {
-        StackCreation {
-            background: images.background.clone(),
-            border: images.border.clone(),
-            hover_overlay: images.hover_overlay.clone(),
-            title_font: fonts.title.clone(),
-            title_transform: Transform::from_xyz(
-                0.,
-                0.5 * (visual_size.y - CARD_STACK_Y_SPACING),
-                DELTA_Z,
-            ),
-            card_value_transform: Transform::from_xyz(
-                -0.5 * visual_size.x + CARD_VALUE_SPACING_FROM_CARD_EDGE,
-                -0.5 * visual_size.y + CARD_VALUE_SPACING_FROM_CARD_EDGE,
-                DELTA_Z,
-            ),
-        }
-    }
+/// Spawns a loose card. The new card should be added to a stack straight away.
+fn spawn_card(
+    commands: &mut Commands,
+    card: &CardType,
+    card_images: &Res<CardImages>,
+    card_fonts: &Res<CardFonts>,
+    title_transform: Transform,
+    card_value_transform: Transform,
+) -> Entity {
+    let foreground_color = card.category.text_color();
 
-    /// - `move_to_empty_space`: Whether this stack should try moving somewhere relatively empty nearby.
-    ///   Stacking on top of another, compatible, stack is also considered "moving to empty space".
-    pub fn spawn_stack(
-        &self,
-        commands: &mut Commands,
-        position: Vec2,
-        card_type: &CardType,
-        card_amount: usize,
-        move_to_empty_space: bool,
-    ) {
-        if card_amount == 0 {
-            return;
-        }
+    let (card_component, description_component) = card.get_card_components();
 
-        let entities: Vec<Entity> = (0..card_amount)
-            .map(|_| self.spawn_card(commands, &card_type))
-            .collect();
-
-        StackCreation::spawn_stack_root(commands, position, &entities, move_to_empty_space);
-        set_stack_card_transforms(commands, &entities);
-    }
-
-    /// Spawns a loose card. The new card should be added to a stack straight away.
-    fn spawn_card(&self, commands: &mut Commands, card: &CardType) -> Entity {
-        let foreground_color = card.category.text_color();
-
-        let (card_component, description_component) = card.get_card_components();
-
-        let entity = commands
-            .spawn_bundle(SpriteBundle {
-                texture: self.background.clone(),
+    let entity = commands
+        .spawn_bundle(SpriteBundle {
+            texture: card_images.background.clone(),
+            sprite: Sprite {
+                color: card.category.background_color(),
+                ..default()
+            },
+            ..default()
+        })
+        .insert(card_component)
+        .insert(description_component)
+        .with_children(|parent| {
+            // Border
+            parent.spawn_bundle(SpriteBundle {
+                texture: card_images.border.clone(),
+                transform: Transform::from_xyz(0.0, 0.0, DELTA_Z),
                 sprite: Sprite {
-                    color: card.category.background_color(),
+                    color: CARD_BORDER_COLOR,
                     ..default()
                 },
                 ..default()
-            })
-            .insert(card_component)
-            .insert(description_component)
-            .with_children(|parent| {
-                // Border
-                parent.spawn_bundle(SpriteBundle {
-                    texture: self.border.clone(),
-                    transform: Transform::from_xyz(0.0, 0.0, DELTA_Z),
+            });
+            // Title text
+            parent.spawn_bundle(Text2dBundle {
+                text: Text::with_section(
+                    card.title,
+                    TextStyle {
+                        font: card_fonts.title.clone(),
+                        font_size: CARD_STACK_Y_SPACING,
+                        color: foreground_color,
+                    },
+                    TextAlignment {
+                        vertical: VerticalAlign::Center,
+                        horizontal: HorizontalAlign::Center,
+                    },
+                ),
+                transform: title_transform,
+                ..default()
+            });
+            // Hover overlay
+            parent
+                .spawn_bundle(SpriteBundle {
+                    texture: card_images.hover_overlay.clone(),
                     sprite: Sprite {
-                        color: CARD_BORDER_COLOR,
+                        color: CARD_HOVER_OVERLAY_COLOR,
                         ..default()
                     },
+                    transform: Transform::from_xyz(0.0, 0.0, DELTA_Z * 1.5),
+                    visibility: Visibility { is_visible: false },
                     ..default()
-                });
-                // Title text
+                })
+                .insert(IsCardHoverOverlay);
+
+            // Card coin value
+            if let Some(value) = card.value {
                 parent.spawn_bundle(Text2dBundle {
                     text: Text::with_section(
-                        card.title,
+                        format!("{} C", value),
                         TextStyle {
-                            font: self.title_font.clone(),
+                            font: card_fonts.title.clone(),
                             font_size: CARD_STACK_Y_SPACING,
                             color: foreground_color,
                         },
                         TextAlignment {
-                            vertical: VerticalAlign::Center,
-                            horizontal: HorizontalAlign::Center,
+                            vertical: VerticalAlign::Bottom,
+                            horizontal: HorizontalAlign::Left,
                         },
                     ),
-                    transform: self.title_transform,
+                    transform: card_value_transform,
                     ..default()
                 });
-                // Hover overlay
-                parent
-                    .spawn_bundle(SpriteBundle {
-                        texture: self.hover_overlay.clone(),
-                        sprite: Sprite {
-                            color: CARD_HOVER_OVERLAY_COLOR,
-                            ..default()
-                        },
-                        transform: Transform::from_xyz(0.0, 0.0, DELTA_Z * 1.5),
-                        visibility: Visibility { is_visible: false },
-                        ..default()
-                    })
-                    .insert(IsCardHoverOverlay);
+            }
+        })
+        .id();
 
-                // Card coin value
-                if let Some(value) = card.value {
-                    parent.spawn_bundle(Text2dBundle {
-                        text: Text::with_section(
-                            format!("{} C", value),
-                            TextStyle {
-                                font: self.title_font.clone(),
-                                font_size: CARD_STACK_Y_SPACING,
-                                color: foreground_color,
-                            },
-                            TextAlignment {
-                                vertical: VerticalAlign::Bottom,
-                                horizontal: HorizontalAlign::Left,
-                            },
-                        ),
-                        transform: self.card_value_transform,
-                        ..default()
-                    });
-                }
-            })
-            .id();
-
-        // Call the custom on_spawn function, if there is one.
-        if let Some(func) = card.on_spawn {
-            func(commands, entity)
-        }
-
-        entity
+    // Call the custom on_spawn function, if there is one.
+    if let Some(func) = card.on_spawn {
+        func(commands, entity)
     }
 
-    fn spawn_stack_root(
-        commands: &mut Commands,
-        position: Vec2,
-        cards: &[Entity],
-        move_to_empty_space: bool,
-    ) -> Entity {
-        let root_id = commands
-            .spawn_bundle(TransformBundle::from_transform(Transform::from_xyz(
-                position.x,
-                position.y,
-                get_semi_random_stack_root_z(cards[0]),
-            )))
-            .insert_children(0, cards)
-            .insert(CardStack(Vec::from(cards)))
-            .id();
+    entity
+}
 
-        if move_to_empty_space {
-            commands
-                .entity(root_id)
-                .insert(StackLookingForMovementTarget);
-        } else {
-            commands.entity(root_id).insert(StackPhysics);
-        }
+fn spawn_stack_root(
+    commands: &mut Commands,
+    position: Vec2,
+    cards: &[Entity],
+    move_to_empty_space: bool,
+) -> Entity {
+    let root_id = commands
+        .spawn_bundle(TransformBundle::from_transform(Transform::from_xyz(
+            position.x,
+            position.y,
+            get_semi_random_stack_root_z(cards[0]),
+        )))
+        .insert_children(0, cards)
+        .insert(CardStack(Vec::from(cards)))
+        .id();
 
-        root_id
+    if move_to_empty_space {
+        commands
+            .entity(root_id)
+            .insert(StackLookingForMovementTarget);
+    } else {
+        commands.entity(root_id).insert(StackPhysics);
     }
+
+    root_id
 }
 
 /// Generates a semi-random z position for a stack, based on either the entity id of the stack
@@ -361,7 +347,7 @@ pub fn split_stack(
             .remove_children(top_stack);
 
         // Create the new top stack root.
-        let new_root_id = StackCreation::spawn_stack_root(commands, Vec2::ZERO, top_stack, false);
+        let new_root_id = spawn_stack_root(commands, Vec2::ZERO, top_stack, false);
         // We explicitly set the transform here, because the default stack spawner will randomize
         // the Z height. Instead, we want it to be right where the hovered card was.
         commands

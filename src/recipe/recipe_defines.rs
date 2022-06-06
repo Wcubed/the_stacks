@@ -2,8 +2,8 @@ use crate::card_packs::{BUY_FOREST_PACK, FOREST_PACK};
 use crate::card_types::CardCategory::{SystemCard, Worker};
 use crate::card_types::{CLAY, COIN, HEARTSTONE, LOG, MARKET, PLANK, TREE, VILLAGER};
 use crate::recipe::{FinishRecipeMarker, RecipeUses, Recipes, RecipesBuilder};
-use crate::stack::stack_utils::{delete_cards, StackCreation};
-use crate::stack::{Card, CardStack};
+use crate::stack::stack_utils::delete_cards;
+use crate::stack::{Card, CardStack, CreateStackEvent};
 use bevy::prelude::*;
 
 pub fn build_recipes(world: &mut World) -> Recipes {
@@ -27,7 +27,7 @@ pub fn build_recipes(world: &mut World) -> Recipes {
                 With<FinishRecipeMarker>,
             >,
              mut card_query: Query<(&Card, &mut RecipeUses)>,
-             creation: Res<StackCreation>| {
+             mut creation: EventWriter<CreateStackEvent>| {
                 for (root, stack, global_transform) in recipe_stack_query.iter() {
                     for &card_entity in stack.iter() {
                         if let Ok((card, mut uses)) = card_query.get_mut(card_entity) {
@@ -39,13 +39,11 @@ pub fn build_recipes(world: &mut World) -> Recipes {
                                     uses.0 -= 1;
                                 }
 
-                                creation.spawn_stack(
-                                    &mut commands,
-                                    global_transform.translation.truncate(),
-                                    &LOG,
-                                    1,
-                                    true,
-                                );
+                                creation.send(CreateStackEvent {
+                                    position: global_transform.translation.truncate(),
+                                    card_type: &LOG,
+                                    amount: 1,
+                                });
                                 break;
                             }
                         }
@@ -67,7 +65,7 @@ pub fn build_recipes(world: &mut World) -> Recipes {
                 With<FinishRecipeMarker>,
             >,
              card_query: Query<&Card>,
-             creation: Res<StackCreation>| {
+             mut creation: EventWriter<CreateStackEvent>| {
                 for (root, stack, global_transform) in recipe_stack_query.iter() {
                     for &card_entity in stack.iter() {
                         if let Ok(card) = card_query.get(card_entity) {
@@ -75,13 +73,11 @@ pub fn build_recipes(world: &mut World) -> Recipes {
                                 // The recipe consumes a single log.
                                 delete_cards(&mut commands, &[card_entity], root, stack);
 
-                                creation.spawn_stack(
-                                    &mut commands,
-                                    global_transform.translation.truncate(),
-                                    &PLANK,
-                                    1,
-                                    true,
-                                );
+                                creation.send(CreateStackEvent {
+                                    position: global_transform.translation.truncate(),
+                                    card_type: &PLANK,
+                                    amount: 1,
+                                });
                                 break;
                             }
                         }
@@ -105,7 +101,7 @@ pub fn build_recipes(world: &mut World) -> Recipes {
                 With<FinishRecipeMarker>,
             >,
              card_query: Query<&Card>,
-             creation: Res<StackCreation>| {
+             mut creation: EventWriter<CreateStackEvent>| {
                 for (root, stack, global_transform) in recipe_stack_query.iter() {
                     let mut total_value = 0;
 
@@ -136,13 +132,11 @@ pub fn build_recipes(world: &mut World) -> Recipes {
                     }
 
                     if total_value > 0 {
-                        creation.spawn_stack(
-                            &mut commands,
-                            global_transform.translation.truncate(),
-                            &COIN,
-                            total_value,
-                            true,
-                        );
+                        creation.send(CreateStackEvent {
+                            position: global_transform.translation.truncate(),
+                            card_type: &COIN,
+                            amount: total_value,
+                        });
                     }
                 }
             },
@@ -168,7 +162,7 @@ pub fn build_recipes(world: &mut World) -> Recipes {
                 With<FinishRecipeMarker>,
             >,
              card_query: Query<&Card>,
-             creation: Res<StackCreation>| {
+             mut creation: EventWriter<CreateStackEvent>| {
                 for (root, stack, global_transform) in recipe_stack_query.iter() {
                     let pack_cost = card_query.get(stack[0]).unwrap().value.unwrap();
 
@@ -198,13 +192,11 @@ pub fn build_recipes(world: &mut World) -> Recipes {
                     }
 
                     // Spawn pack.
-                    creation.spawn_stack(
-                        &mut commands,
-                        global_transform.translation.truncate(),
-                        &FOREST_PACK,
-                        1,
-                        true,
-                    );
+                    creation.send(CreateStackEvent {
+                        position: global_transform.translation.truncate(),
+                        card_type: &FOREST_PACK,
+                        amount: 1,
+                    });
                 }
             },
         )
@@ -224,7 +216,7 @@ pub fn build_recipes(world: &mut World) -> Recipes {
                 With<FinishRecipeMarker>,
             >,
              card_query: Query<&Card>,
-             creation: Res<StackCreation>| {
+             mut creation: EventWriter<CreateStackEvent>| {
                 for (root, stack, global_transform) in recipe_stack_query.iter() {
                     let cards_to_be_deleted: Vec<Entity> = stack
                         .iter()
@@ -240,13 +232,11 @@ pub fn build_recipes(world: &mut World) -> Recipes {
 
                     delete_cards(&mut commands, &cards_to_be_deleted, root, stack);
 
-                    creation.spawn_stack(
-                        &mut commands,
-                        global_transform.translation.truncate(),
-                        &VILLAGER,
-                        1,
-                        true,
-                    );
+                    creation.send(CreateStackEvent {
+                        position: global_transform.translation.truncate(),
+                        card_type: &VILLAGER,
+                        amount: 1,
+                    });
                 }
             },
         )

@@ -1,7 +1,7 @@
 use crate::card_types::{CardCategory, CardType, CLAY, TREE};
 use crate::procedural::SeededHasherResource;
-use crate::stack::stack_utils::{delete_cards, StackCreation};
-use crate::stack::{Card, CardStack, HoveredCard, IsExclusiveBottomCard};
+use crate::stack::stack_utils::delete_cards;
+use crate::stack::{Card, CardStack, CreateStackEvent, HoveredCard, IsExclusiveBottomCard};
 use crate::UpdateStage;
 use bevy::prelude::*;
 
@@ -53,9 +53,9 @@ pub fn card_pack_open_system(
     mut card_pack_query: Query<(&Card, &mut CardPack, &GlobalTransform, &Parent)>,
     hovered_card_query: Query<Entity, With<HoveredCard>>,
     stacks_query: Query<&CardStack>,
-    creation: Res<StackCreation>,
     mouse_input: Res<Input<MouseButton>>,
     seeded_hasing: Res<SeededHasherResource>,
+    mut creation: EventWriter<CreateStackEvent>,
 ) {
     if mouse_input.just_pressed(MouseButton::Right) {
         for hovered in hovered_card_query.iter() {
@@ -75,13 +75,11 @@ pub fn card_pack_open_system(
 
                     // Spawn one card from the card pack.
                     if let Some(new_card) = new_card {
-                        creation.spawn_stack(
-                            &mut commands,
-                            global_transform.translation.truncate(),
-                            new_card,
-                            1,
-                            true,
-                        );
+                        creation.send(CreateStackEvent {
+                            position: global_transform.translation.truncate(),
+                            card_type: new_card,
+                            amount: 1,
+                        });
                         pack.cards -= 1;
                     }
                 }
