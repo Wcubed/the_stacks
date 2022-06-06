@@ -8,6 +8,7 @@
 mod camera;
 mod card_packs;
 mod card_types;
+mod localization;
 pub mod procedural;
 mod recipe;
 mod stack;
@@ -15,17 +16,25 @@ mod ui;
 
 use crate::camera::*;
 use crate::card_packs::CardPackPlugin;
+use crate::localization::LocalizationPlugin;
 use crate::procedural::ProceduralPlugin;
 use crate::recipe::RecipePlugin;
-use crate::stack::StackPlugin;
+use crate::stack::{CardFonts, CardImages, StackPlugin};
 use crate::ui::UiPlugin;
 use bevy::ecs::schedule::ShouldRun;
 use bevy::prelude::*;
+use bevy_asset_loader::AssetLoader;
 
 pub struct TheStacksPlugin;
 
 impl Plugin for TheStacksPlugin {
     fn build(&self, app: &mut App) {
+        AssetLoader::new(GameState::AssetLoading)
+            .continue_to_state(GameState::Run)
+            .with_collection::<CardImages>()
+            .with_collection::<CardFonts>()
+            .build(app);
+
         app.insert_resource(Msaa { samples: 4 })
             .insert_resource(ClearColor(Color::rgb(0.1, 0.2, 0.1)))
             .insert_resource(TimeSpeed {
@@ -49,6 +58,7 @@ impl Plugin for TheStacksPlugin {
             .add_plugin(RecipePlugin)
             .add_plugin(OrthographicCameraPlugin)
             .add_plugin(UiPlugin)
+            .add_plugin(LocalizationPlugin)
             .add_system_set(
                 SystemSet::on_update(GameState::Run)
                     .with_system(game_speed_change_system)

@@ -50,12 +50,6 @@ pub struct StackPlugin;
 
 impl Plugin for StackPlugin {
     fn build(&self, app: &mut App) {
-        AssetLoader::new(GameState::AssetLoading)
-            .continue_to_state(GameState::Run)
-            .with_collection::<CardImages>()
-            .with_collection::<CardFonts>()
-            .build(app);
-
         app.add_event::<StackDroppedEvent>()
             .add_event::<CardPickedUpEvent>()
             .add_event::<CreateStackEvent>()
@@ -88,6 +82,7 @@ impl Plugin for StackPlugin {
     }
 }
 
+/// To be loaded by an [AssetLoader](bevy_asset_loader::AssetLoader).
 #[derive(AssetCollection)]
 pub struct CardImages {
     #[asset(path = "vector_images/card_background.png")]
@@ -104,6 +99,7 @@ pub struct CardImages {
     pub _card_foreground_images: Vec<Handle<Image>>,
 }
 
+/// To be loaded by an [AssetLoader](bevy_asset_loader::AssetLoader).
 #[derive(AssetCollection)]
 pub struct CardFonts {
     #[asset(path = "fonts/FallingSky-JKwK.otf")]

@@ -1,3 +1,4 @@
+use crate::localization::Localizer;
 use crate::recipe::OngoingRecipe;
 use crate::stack::{Card, CardDescription, CardStack, HoveredCard};
 use crate::{LengthOfDay, Speed, TimeOfDay, TimeSpeed};
@@ -5,6 +6,7 @@ use bevy::prelude::*;
 use bevy_egui::egui::ProgressBar;
 use bevy_egui::*;
 use bevy_egui::{EguiContext, EguiPlugin};
+use fluent::FluentArgs;
 
 /// Title height is a guess. Needed to calculate window positions,
 /// because setting the window size does not include the title.
@@ -86,6 +88,7 @@ fn game_speed_ui(
     mut speed: ResMut<TimeSpeed>,
     time_of_day: Res<TimeOfDay>,
     length_of_day: Res<LengthOfDay>,
+    localizer: Res<Localizer>,
 ) {
     egui::Window::new("speed_window")
         .title_bar(false)
@@ -107,9 +110,12 @@ fn game_speed_ui(
 
                 let seconds_left_in_day = (1.0 - time_of_day.time_of_day) * length_of_day.0;
 
+                let day_string = localizer
+                    .localize_with_args("ui_current_day", &[("day", &time_of_day.day.to_string())]);
+
                 let day_progress = ProgressBar::new(time_of_day.time_of_day)
                     .desired_width(DAY_PROGRESS_BAR_WIDTH)
-                    .text(format!("Day {}", time_of_day.day));
+                    .text(day_string);
                 ui.add(day_progress)
                     .on_hover_text(format!("{:.1} seconds left", seconds_left_in_day));
             });

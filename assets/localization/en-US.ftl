@@ -1,0 +1,1 @@
+ui_current_day = Day {$day}

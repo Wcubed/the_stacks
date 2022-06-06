@@ -9,3 +9,6 @@ edition = "2021"
 bevy = { version = "0.7.0", features = ["dynamic"] }
 bevy_asset_loader = "0.10.0"
 bevy_egui = "0.14.0"
+fluent = "0.16.0"
+intl-memoizer = "0.5.1"
+unic-langid = { version = "0.9.0", features = ["macros"] }
