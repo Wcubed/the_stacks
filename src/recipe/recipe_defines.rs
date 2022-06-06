@@ -1,6 +1,7 @@
 use crate::card_packs::{BUY_FOREST_PACK, FOREST_PACK};
-use crate::card_types::CardCategory;
+use crate::card_types::{CardCategory, APPLE};
 use crate::card_types::{CLAY, COIN, LOG, MARKET, PLANK, TREE, VILLAGER};
+use crate::procedural::SeededHasherResource;
 use crate::recipe::{FinishRecipeMarker, RecipeUses, Recipes, RecipesBuilder};
 use crate::stack::stack_utils::delete_cards;
 use crate::stack::{Card, CardStack, CreateStackEvent};
@@ -23,6 +24,7 @@ pub fn build_recipes(world: &mut World) -> Recipes {
                 With<FinishRecipeMarker>,
             >,
              mut card_query: Query<(&Card, &mut RecipeUses)>,
+             seeded_hash: Res<SeededHasherResource>,
              mut creation: EventWriter<CreateStackEvent>| {
                 for (root, stack, global_transform) in recipe_stack_query.iter() {
                     for &card_entity in stack.iter() {
@@ -40,6 +42,18 @@ pub fn build_recipes(world: &mut World) -> Recipes {
                                     card_type: &LOG,
                                     amount: 1,
                                 });
+
+                                // Sometimes, a tree also drops an apple.
+                                let apple_percentage = 25;
+                                let mut rng = seeded_hash.with(card_entity);
+                                rng.with(uses.0);
+                                if rng.value_in_range(0..100) < apple_percentage {
+                                    creation.send(CreateStackEvent {
+                                        position: global_transform.translation.truncate(),
+                                        card_type: &APPLE,
+                                        amount: 1,
+                                    });
+                                }
                                 break;
                             }
                         }

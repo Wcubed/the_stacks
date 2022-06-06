@@ -25,7 +25,7 @@ impl CardCategory {
             CardCategory::Worker => Color::hsl(25., 0.8, 0.2),
             CardCategory::Nature => Color::DARK_GREEN,
             CardCategory::Resource => Color::BLUE,
-            CardCategory::Food => Color::OLIVE,
+            CardCategory::Food => Color::ORANGE,
             CardCategory::Valuable => Color::YELLOW,
             CardCategory::Gem => Color::MAROON,
         }
