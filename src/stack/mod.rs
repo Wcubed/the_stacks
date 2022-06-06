@@ -2,7 +2,7 @@ pub mod stack_utils;
 mod tests;
 
 use crate::card_packs::BUY_FOREST_PACK;
-use crate::card_types::{CardCategory, CardType, CLAY, COIN, MARKET, TREE, VILLAGER};
+use crate::card_types::{CardCategory, CardType, CLAY, CLAY_PATCH, COIN, MARKET, TREE, VILLAGER};
 use crate::recipe::{is_ongoing_recipe_valid_for_stack, OngoingRecipe, Recipes, StackCheck};
 use crate::stack::stack_utils::{
     spawn_stack, split_stack, stack_visual_size, CARD_VALUE_SPACING_FROM_CARD_EDGE,
@@ -65,7 +65,11 @@ impl Plugin for StackPlugin {
             .add_system_set(
                 SystemSet::on_exit(GameState::AssetLoading).with_system(on_assets_loaded),
             )
-            .add_system_set(SystemSet::on_enter(GameState::Run).with_system(spawn_test_cards))
+            .add_system_set(
+                SystemSet::on_enter(GameState::Run)
+                    .with_system(spawn_system_cards)
+                    .with_system(spawn_test_cards),
+            )
             .add_system_set(
                 SystemSet::on_update(GameState::Run)
                     .with_system(stack_creation_system)
@@ -199,7 +203,7 @@ pub fn on_assets_loaded(
     commands.insert_resource(CardVisualSize(card_background.size()));
 }
 
-pub fn spawn_test_cards(mut commands: Commands, mut creation: EventWriter<CreateStackEvent>) {
+pub fn spawn_system_cards(mut creation: EventWriter<CreateStackEvent>) {
     let top_row_zero = Vec2::new(0., 400.0);
     creation.send(CreateStackEvent {
         position: top_row_zero,
@@ -211,7 +215,9 @@ pub fn spawn_test_cards(mut commands: Commands, mut creation: EventWriter<Create
         card_type: &BUY_FOREST_PACK,
         amount: 1,
     });
+}
 
+pub fn spawn_test_cards(mut creation: EventWriter<CreateStackEvent>) {
     creation.send(CreateStackEvent {
         position: Vec2::ZERO,
         card_type: &TREE,
@@ -229,7 +235,7 @@ pub fn spawn_test_cards(mut commands: Commands, mut creation: EventWriter<Create
     });
     creation.send(CreateStackEvent {
         position: Vec2::ZERO,
-        card_type: &CLAY,
+        card_type: &CLAY_PATCH,
         amount: 5,
     });
 }

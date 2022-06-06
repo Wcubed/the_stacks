@@ -104,6 +104,16 @@ pub(crate) const TREE: CardType = CardType {
     }),
 };
 
+pub(crate) const CLAY_PATCH: CardType = CardType {
+    title: "Clay Patch",
+    value: Some(0),
+    category: CardCategory::Nature,
+    description: "A slippery piece of ground.",
+    on_spawn: Some(|commands: &mut Commands, card: Entity| {
+        commands.entity(card).insert(RecipeUses(3));
+    }),
+};
+
 pub(crate) const CLAY: CardType = CardType {
     title: "Clay",
     value: Some(1),

@@ -93,25 +93,23 @@ impl<'a> RecipesBuilder<'a> {
     }
 
     /// Instant recipes can be done while in-game time is paused.
-    pub fn with_instant_recipe<Params>(
-        mut self,
+    pub fn add_instant_recipe<Params>(
+        &mut self,
         name: &'static str,
         valid_callback: fn(&StackCheck) -> bool,
         finished_system: impl IntoSystem<(), (), Params> + 'static,
-    ) -> Self {
+    ) {
         self.new_recipe(name, None, valid_callback, finished_system);
-        self
     }
 
-    pub fn with_recipe<Params>(
-        mut self,
+    pub fn add_recipe<Params>(
+        &mut self,
         name: &'static str,
         seconds: f32,
         valid_callback: fn(&StackCheck) -> bool,
         finished_system: impl IntoSystem<(), (), Params> + 'static,
-    ) -> Self {
+    ) {
         self.new_recipe(name, Some(seconds), valid_callback, finished_system);
-        self
     }
 
     fn new_recipe<Params>(

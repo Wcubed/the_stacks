@@ -1,11 +1,11 @@
-use crate::card_types::{CardCategory, CardType, CLAY, TREE};
+use crate::card_types::{CardCategory, CardType, CLAY_PATCH, TREE};
 use crate::procedural::SeededHasherResource;
 use crate::stack::stack_utils::delete_cards;
 use crate::stack::{Card, CardStack, CreateStackEvent, HoveredCard, IsExclusiveBottomCard};
 use crate::UpdateStage;
 use bevy::prelude::*;
 
-const FOREST_PACK_CONTENT_OPTIONS: &[CardType] = &[TREE, CLAY];
+const FOREST_PACK_CONTENT_OPTIONS: &[CardType] = &[TREE, CLAY_PATCH];
 
 pub(crate) const BUY_FOREST_PACK: CardType = CardType {
     title: "Forest",
