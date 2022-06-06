@@ -267,7 +267,7 @@ pub fn recipe_timer_update_system(
     speed: Res<TimeSpeed>,
 ) {
     for (root, mut recipe) in ongoing_recipes.iter_mut() {
-        let progress = time.delta_seconds() * speed.speed_as_factor();
+        let progress = time.delta_seconds() * speed.as_factor();
         recipe.timer.tick(Duration::from_secs_f32(progress));
 
         if recipe.timer.finished() {

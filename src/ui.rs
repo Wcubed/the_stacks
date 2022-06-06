@@ -1,7 +1,8 @@
 use crate::recipe::OngoingRecipe;
 use crate::stack::{Card, CardDescription, CardStack, HoveredCard};
-use crate::{Speed, TimeSpeed};
+use crate::{LengthOfDay, Speed, TimeOfDay, TimeSpeed};
 use bevy::prelude::*;
+use bevy_egui::egui::ProgressBar;
 use bevy_egui::*;
 use bevy_egui::{EguiContext, EguiPlugin};
 
@@ -20,6 +21,8 @@ const RECIPE_INFO_WINDOW_OFFSET: egui::Vec2 = egui::vec2(
     -(CARD_INFO_SIZE.y + TITLE_HEIGHT) + CARD_INFO_WINDOW_OFFSET.y,
 );
 const GAME_SPEED_WINDOW_OFFSET: egui::Vec2 = egui::vec2(-OFFSETS.x, OFFSETS.y);
+
+const DAY_PROGRESS_BAR_WIDTH: f32 = 400.;
 
 pub struct UiPlugin;
 
@@ -78,7 +81,12 @@ fn card_crafting_info_ui(
     }
 }
 
-fn game_speed_ui(mut context: ResMut<EguiContext>, mut speed: ResMut<TimeSpeed>) {
+fn game_speed_ui(
+    mut context: ResMut<EguiContext>,
+    mut speed: ResMut<TimeSpeed>,
+    time_of_day: Res<TimeOfDay>,
+    length_of_day: Res<LengthOfDay>,
+) {
     egui::Window::new("speed_window")
         .title_bar(false)
         .resizable(false)
@@ -96,6 +104,14 @@ fn game_speed_ui(mut context: ResMut<EguiContext>, mut speed: ResMut<TimeSpeed>)
                     .on_hover_text("[2]");
                 ui.selectable_value(&mut speed.speed, Speed::TRIPLE, ">>>")
                     .on_hover_text("[3]");
+
+                let seconds_left_in_day = (1.0 - time_of_day.time_of_day) * length_of_day.0;
+
+                let day_progress = ProgressBar::new(time_of_day.time_of_day)
+                    .desired_width(DAY_PROGRESS_BAR_WIDTH)
+                    .text(format!("Day {}", time_of_day.day));
+                ui.add(day_progress)
+                    .on_hover_text(format!("{:.1} seconds left", seconds_left_in_day));
             });
         });
 }
