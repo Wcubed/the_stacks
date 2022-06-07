@@ -71,6 +71,7 @@ impl Plugin for TheStacksPlugin {
 enum GameState {
     AssetLoading,
     Run,
+    PauseMenu,
 }
 
 enum UpdateStage {

@@ -1,4 +1,8 @@
 # --- Ui strings ---
+ui_pause_menu_title = Paused
+ui_pause_menu_language_label = Language
+ui_pause_menu_resume = Resume
+
 ui_current_day = Day {$day}
 ui_seconds_left_in_day = {$seconds} seconds left in day
 

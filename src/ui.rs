@@ -1,11 +1,12 @@
 use crate::localization::Localizer;
 use crate::recipe::OngoingRecipe;
 use crate::stack::{Card, CardStack, HoveredCard};
-use crate::{LengthOfDay, Speed, TimeOfDay, TimeSpeed};
+use crate::{GameState, LengthOfDay, Speed, TimeOfDay, TimeSpeed};
 use bevy::prelude::*;
 use bevy_egui::egui::ProgressBar;
 use bevy_egui::*;
 use bevy_egui::{EguiContext, EguiPlugin};
+use unic_langid::LanguageIdentifier;
 
 /// Title height is a guess. Needed to calculate window positions,
 /// because setting the window size does not include the title.
@@ -22,6 +23,7 @@ const RECIPE_INFO_WINDOW_OFFSET: egui::Vec2 = egui::vec2(
     -(CARD_INFO_SIZE.y + TITLE_HEIGHT) + CARD_INFO_WINDOW_OFFSET.y,
 );
 const GAME_SPEED_WINDOW_OFFSET: egui::Vec2 = egui::vec2(-OFFSETS.x, OFFSETS.y);
+const OPEN_MENU_WINDOW_OFFSET: egui::Vec2 = egui::vec2(OFFSETS.x, OFFSETS.y);
 
 const DAY_PROGRESS_BAR_WIDTH: f32 = 400.;
 
@@ -30,9 +32,14 @@ pub struct UiPlugin;
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugin(EguiPlugin)
-            .add_system(card_info_ui)
-            .add_system(card_crafting_info_ui)
-            .add_system(game_speed_ui);
+            .add_system_set(
+                SystemSet::on_update(GameState::Run)
+                    .with_system(card_info_ui)
+                    .with_system(card_crafting_info_ui)
+                    .with_system(game_speed_ui)
+                    .with_system(open_pause_menu_ui),
+            )
+            .add_system_set(SystemSet::on_update(GameState::PauseMenu).with_system(pause_menu_ui));
     }
 }
 
@@ -121,6 +128,65 @@ fn game_speed_ui(
                     .text(day_string);
                 ui.add(day_progress)
                     .on_hover_text(seconds_left_in_day_string);
+            });
+        });
+}
+
+fn open_pause_menu_ui(mut context: ResMut<EguiContext>, mut app_state: ResMut<State<GameState>>) {
+    egui::Window::new("open_menu")
+        .title_bar(false)
+        .resizable(false)
+        .anchor(egui::Align2::LEFT_TOP, OPEN_MENU_WINDOW_OFFSET)
+        .show(context.ctx_mut(), |ui| {
+            if ui.button("☰").clicked() {
+                app_state.push(GameState::PauseMenu);
+            }
+        });
+}
+
+fn pause_menu_ui(
+    mut context: ResMut<EguiContext>,
+    mut app_state: ResMut<State<GameState>>,
+    mut localizer: ResMut<Localizer>,
+) {
+    egui::Window::new(localizer.localize("ui_pause_menu_title"))
+        .id(egui::Id::new("pause_menu"))
+        .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+        .title_bar(true)
+        .resizable(false)
+        .collapsible(false)
+        .show(context.ctx_mut(), |ui| {
+            ui.vertical_centered_justified(|ui| {
+                let mut selected = &localizer.current_language();
+
+                let language_options = localizer.language_options();
+                let mut sorted_language_identifiers: Vec<&LanguageIdentifier> =
+                    language_options.keys().collect();
+                sorted_language_identifiers.sort();
+
+                egui::ComboBox::from_label(localizer.localize("ui_pause_menu_language_label"))
+                    .selected_text(language_options[&selected])
+                    .show_ui(ui, |ui| {
+                        for identifier in sorted_language_identifiers {
+                            ui.selectable_value(
+                                &mut selected,
+                                identifier,
+                                language_options[identifier],
+                            );
+                        }
+                    });
+
+                if selected != &localizer.current_language() {
+                    // TODO (Wybe 2022-06-07): Update the titles of cards.
+                    localizer.select_language(selected.clone());
+                }
+
+                if ui
+                    .button(localizer.localize("ui_pause_menu_resume"))
+                    .clicked()
+                {
+                    app_state.pop();
+                }
             });
         });
 }

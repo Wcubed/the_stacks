@@ -42,6 +42,23 @@ pub struct Localizer {
 }
 
 impl Localizer {
+    pub fn current_language(&self) -> LanguageIdentifier {
+        self.current_language.clone()
+    }
+
+    pub fn select_language(&mut self, new_language: LanguageIdentifier) {
+        if self.languages.contains_key(&new_language) {
+            self.current_language = new_language;
+        }
+    }
+
+    pub fn language_options(&self) -> HashMap<LanguageIdentifier, &'static str> {
+        self.languages
+            .iter()
+            .map(|(key, (_, name))| (key.clone(), <&str>::clone(name)))
+            .collect()
+    }
+
     pub fn localize(&self, id: &str) -> String {
         self.localize_with_args(id, &[])
     }
@@ -49,7 +66,7 @@ impl Localizer {
     pub fn localize_with_args(&self, id: &str, args: &[(&str, &str)]) -> String {
         let mut fluent_args = FluentArgs::new();
         for (key, value) in args {
-            fluent_args.set(key.clone(), value.clone());
+            fluent_args.set(<&str>::clone(key), <&str>::clone(value));
         }
 
         let current_bundle = &self.languages[&self.current_language].0;

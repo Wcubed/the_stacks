@@ -1,4 +1,8 @@
 # --- Ui strings ---
+ui_pause_menu_title = Gepauzeerd
+ui_pause_menu_language_label = Taal
+ui_pause_menu_resume = Verder
+
 ui_current_day = Dag {$day}
 ui_seconds_left_in_day = {$seconds} secondes over in de dag
 
