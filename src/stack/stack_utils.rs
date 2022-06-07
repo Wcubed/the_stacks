@@ -2,8 +2,8 @@ use crate::card_types::CardType;
 use crate::localization::Localizer;
 use crate::recipe::OngoingRecipe;
 use crate::stack::{
-    CardFonts, CardImages, CardStack, IsCardHoverOverlay, StackLookingForMovementTarget,
-    StackPhysics, DELTA_Z,
+    Card, CardFonts, CardImages, CardStack, IsCardHoverOverlay, IsCardTitle,
+    StackLookingForMovementTarget, StackPhysics, DELTA_Z,
 };
 use bevy::prelude::*;
 use std::collections::hash_map::DefaultHasher;
@@ -102,22 +102,13 @@ fn spawn_card(
                 ..default()
             });
             // Title text
-            parent.spawn_bundle(Text2dBundle {
-                text: Text::with_section(
-                    card_component.localize_title(localizer),
-                    TextStyle {
-                        font: card_fonts.title.clone(),
-                        font_size: CARD_STACK_Y_SPACING,
-                        color: foreground_color,
-                    },
-                    TextAlignment {
-                        vertical: VerticalAlign::Center,
-                        horizontal: HorizontalAlign::Center,
-                    },
-                ),
-                transform: title_transform,
-                ..default()
-            });
+            parent
+                .spawn_bundle(Text2dBundle {
+                    text: card_title_text(&card_component, card_fonts, localizer),
+                    transform: title_transform,
+                    ..default()
+                })
+                .insert(IsCardTitle);
             // Foreground image
             parent.spawn_bundle(SpriteBundle {
                 texture: foreground_image,
@@ -199,6 +190,25 @@ fn spawn_stack_root(
     }
 
     root_id
+}
+
+pub fn card_title_text(
+    card: &Card,
+    card_fonts: &Res<CardFonts>,
+    localizer: &Res<Localizer>,
+) -> Text {
+    Text::with_section(
+        card.localize_title(localizer),
+        TextStyle {
+            font: card_fonts.title.clone(),
+            font_size: CARD_STACK_Y_SPACING,
+            color: card.category.text_color(),
+        },
+        TextAlignment {
+            vertical: VerticalAlign::Center,
+            horizontal: HorizontalAlign::Center,
+        },
+    )
 }
 
 /// Generates a semi-random z position for a stack, based on either the entity id of the stack

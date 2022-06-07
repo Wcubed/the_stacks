@@ -15,7 +15,7 @@ ct_market = Markt
 cd_market = Verkoop kaarten hier voor munten.
 
 ct_buy_forest_pack = Koop Bos
-cd_buy_forest_pack = Stapel munten hierop om een Bos Pack te kopen
+cd_buy_forest_pack = Stapel munten hierop om een Bos bundel te kopen
 
 # Card packs
 ct_forest_pack = Bos

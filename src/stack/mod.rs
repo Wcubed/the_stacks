@@ -6,8 +6,9 @@ use crate::card_types::{CardCategory, CardType, CLAY, CLAY_PATCH, COIN, MARKET, 
 use crate::localization::Localizer;
 use crate::recipe::{is_ongoing_recipe_valid_for_stack, OngoingRecipe, Recipes, StackCheck};
 use crate::stack::stack_utils::{
-    spawn_stack, split_stack, stack_visual_size, CARD_DESCRIPTION_LOCALIZATION_PREFIX,
-    CARD_TITLE_LOCALIZATION_PREFIX, CARD_VALUE_SPACING_FROM_CARD_EDGE,
+    card_title_text, spawn_stack, split_stack, stack_visual_size,
+    CARD_DESCRIPTION_LOCALIZATION_PREFIX, CARD_TITLE_LOCALIZATION_PREFIX,
+    CARD_VALUE_SPACING_FROM_CARD_EDGE,
 };
 use crate::GameState;
 use bevy::math::{const_vec2, const_vec3};
@@ -80,6 +81,10 @@ impl Plugin for StackPlugin {
                     .with_system(stack_overlap_nudging_system)
                     .with_system(find_stack_movement_target_system)
                     .with_system(stack_move_to_target_system),
+            )
+            .add_system_set(
+                SystemSet::on_update(GameState::PauseMenu)
+                    .with_system(card_title_relocalization_system),
             );
     }
 }
@@ -168,6 +173,9 @@ pub struct IsCardHoverOverlay;
 /// Marks an entity that sits above a card, to indicate a stack can be dropped there.
 #[derive(Component)]
 pub struct IsDropTargetOverlay;
+
+#[derive(Component)]
+pub struct IsCardTitle;
 
 #[derive(Component, Deref, DerefMut)]
 pub struct StackRelativeDragPosition(Vec2);
@@ -963,6 +971,23 @@ pub fn find_stack_movement_target_system(
     // TODO (Wybe 2022-05-25): Implement moving (teleporting for now) to the closest empty space
     // TODO (Wybe 2022-05-25): Implement smoothly moving to the target (needs another system which handles the movement).
     // TODO (Wybe 2022-05-25): Implement what happens when cards get picked up by the user during this movement.
+}
+
+/// Updates the card titles when the localization language is changed.
+/// Should be ran while in the pause menu.
+fn card_title_relocalization_system(
+    mut title_query: Query<(&mut Text, &Parent), With<IsCardTitle>>,
+    card_query: Query<&Card>,
+    card_fonts: Res<CardFonts>,
+    localizer: Res<Localizer>,
+) {
+    if localizer.is_changed() {
+        for (mut text, parent) in title_query.iter_mut() {
+            if let Ok(card) = card_query.get(parent.0) {
+                *text = card_title_text(card, &card_fonts, &localizer);
+            }
+        }
+    }
 }
 
 fn window_pos_to_world_pos(
