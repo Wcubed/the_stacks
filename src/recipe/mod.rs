@@ -19,6 +19,10 @@ const RECIPE_PROGRESS_BAR_HEIGHT: f32 = 20.;
 const RECIPE_PROGRESS_BAR_FOREGROUND: Color = Color::WHITE;
 const RECIPE_PROGRESS_BAR_BACKGROUND: Color = Color::rgb(0.1, 0.1, 0.1);
 
+/// Prefix used in front of the recipe id when requesting the localized recipe title.
+/// For example, a recipe with id `cut_tree` will have it's localized title stored under `rt_tree`.
+pub const RECIPE_TITLE_LOCALIZATION_PREFIX: &str = "rt_";
+
 /// Handles recipes on card stacks
 /// Requires [CardPlugin].
 pub struct RecipePlugin;
@@ -43,6 +47,8 @@ impl Plugin for RecipePlugin {
     }
 }
 
+/// This id is used to identify the recipe,
+/// and to retrieve localized strings belonging to the recipe, such as its name.
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
 pub struct RecipeId(pub(crate) &'static str);
 
@@ -93,29 +99,34 @@ impl<'a> RecipesBuilder<'a> {
     }
 
     /// Instant recipes can be done while in-game time is paused.
+    /// `id` is used to identify the recipe,
+    /// and to retrieve localized strings such as the recipe name.
     pub fn add_instant_recipe<Params>(
         &mut self,
-        name: &'static str,
+        id: &'static str,
         valid_callback: fn(&StackCheck) -> bool,
         finished_system: impl IntoSystem<(), (), Params> + 'static,
     ) {
-        self.new_recipe(name, None, valid_callback, finished_system);
+        self.new_recipe(id, None, valid_callback, finished_system);
     }
 
+    /// `id` is used to identify the recipe,
+    /// and to retrieve localized strings such as the recipe name.
     pub fn add_recipe<Params>(
         &mut self,
-        name: &'static str,
+        id: &'static str,
         seconds: f32,
         valid_callback: fn(&StackCheck) -> bool,
         finished_system: impl IntoSystem<(), (), Params> + 'static,
     ) {
-        self.new_recipe(name, Some(seconds), valid_callback, finished_system);
+        self.new_recipe(id, Some(seconds), valid_callback, finished_system);
     }
 
+    /// `id` is used to identify the recipe,
+    /// and to retrieve localized strings such as the recipe name.
     fn new_recipe<Params>(
         &mut self,
-        // TODO (Wybe 2022-06-05): Use these names as indexes into some sort of translation file.
-        name: &'static str,
+        id: &'static str,
         seconds: Option<f32>,
         valid_callback: fn(&StackCheck) -> bool,
         finished_system: impl IntoSystem<(), (), Params> + 'static,
@@ -123,7 +134,7 @@ impl<'a> RecipesBuilder<'a> {
         let mut boxed_system = Box::new(IntoSystem::into_system(finished_system));
         boxed_system.initialize(self.world);
 
-        let id = RecipeId(name);
+        let id = RecipeId(id);
 
         let new_recipe = Recipe {
             seconds,

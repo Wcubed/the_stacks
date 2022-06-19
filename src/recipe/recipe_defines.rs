@@ -10,7 +10,7 @@ use bevy::prelude::*;
 pub fn build_recipes(world: &mut World) -> Recipes {
     let mut builder = RecipesBuilder::new(world);
     builder.add_recipe(
-        "Cutting tree",
+        "cut_tree",
         2.,
         |cards| {
             // Contains only trees and workers
@@ -62,7 +62,7 @@ pub fn build_recipes(world: &mut World) -> Recipes {
         },
     );
     builder.add_recipe(
-        "Gathering clay",
+        "gather_clay",
         2.,
         |cards| {
             // Contains only clay patches and workers
@@ -114,7 +114,7 @@ pub fn build_recipes(world: &mut World) -> Recipes {
         },
     );
     builder.add_recipe(
-        "Making plank",
+        "make_plank",
         3.,
         |cards| {
             cards.len() == 2
@@ -148,7 +148,7 @@ pub fn build_recipes(world: &mut World) -> Recipes {
         },
     );
     builder.add_instant_recipe(
-        "Sell cards",
+        "sell_cards",
         |cards| {
             // Bottom card is a market, and there are sellable cards.
             // SystemCards are never sellable.
@@ -204,7 +204,7 @@ pub fn build_recipes(world: &mut World) -> Recipes {
         },
     );
     builder.add_instant_recipe(
-        "Buy card pack",
+        "buy_card_pack",
         |cards| {
             // Bottom card is one of the card pack buy cards, and there are enough coins.
 
@@ -263,7 +263,7 @@ pub fn build_recipes(world: &mut World) -> Recipes {
         },
     );
     builder.add_recipe(
-        "Creating Villager",
+        "create_villager",
         5.0,
         |cards| {
             // 1 of a worker category, 2 clay and 2 coins

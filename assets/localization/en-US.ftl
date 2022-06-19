@@ -8,6 +8,8 @@ ui_seconds_left_in_day = {$seconds} seconds left in day
 
 ui_cannot_be_sold = Cannot be sold.
 
+ui_seconds_left_in_recipe = {$seconds} seconds left
+
 # --- Cards ---
 
 # System cards
@@ -49,3 +51,12 @@ cd_coin = Lifeblood of the village. Literally...
 # Food cards
 ct_apple = Apple
 cd_apple = Rumored to scare doctors.
+
+# --- Recipes ---
+
+rt_cut_tree = Cutting {ct_tree}
+rt_gather_clay = Gathering {ct_clay}
+rt_make_plank = Sawing {ct_plank}
+rt_sell_cards = Selling cards
+rt_buy_card_pack = Buying card pack
+rt_create_village = Creating {ct_villager}

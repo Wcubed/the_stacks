@@ -4,9 +4,11 @@ ui_pause_menu_language_label = Taal
 ui_pause_menu_resume = Verder
 
 ui_current_day = Dag {$day}
-ui_seconds_left_in_day = {$seconds} secondes over in de dag
+ui_seconds_left_in_day = De dag duurt nog {$seconds} seconden
 
 ui_cannot_be_sold = Kan niet verkocht worden.
+
+ui_seconds_left_in_recipe = Duurt nog {$seconds} seconden
 
 # --- Cards ---
 
@@ -15,7 +17,7 @@ ct_market = Markt
 cd_market = Verkoop kaarten hier voor munten.
 
 ct_buy_forest_pack = Koop Bos
-cd_buy_forest_pack = Stapel munten hierop om een Bos bundel te kopen
+cd_buy_forest_pack = Stapel hierop munten om een Bos bundel te kopen
 
 # Card packs
 ct_forest_pack = Bos
@@ -49,3 +51,12 @@ cd_coin = Levensbloed van het dorp. Letterlijk...
 # Food cards
 ct_apple = Appel
 cd_apple = Ze zeggen dat dokters hier bang voor zijn.
+
+# --- Recipes ---
+
+rt_cut_tree = {ct_tree} hakken
+rt_gather_clay = {ct_clay} verzamelen
+rt_make_plank = {ct_plank} zagen
+rt_sell_cards = Kaarten verkopen
+rt_buy_card_pack = Koop kaarten bundel
+rt_create_village = {ct_villager} maken

@@ -1,5 +1,5 @@
 use crate::localization::Localizer;
-use crate::recipe::OngoingRecipe;
+use crate::recipe::{OngoingRecipe, RECIPE_TITLE_LOCALIZATION_PREFIX};
 use crate::stack::{Card, CardStack, HoveredCard};
 use crate::{GameState, LengthOfDay, Speed, TimeOfDay, TimeSpeed};
 use bevy::prelude::*;
@@ -70,19 +70,27 @@ fn card_crafting_info_ui(
     mut context: ResMut<EguiContext>,
     hovered_card_query: Query<&Parent, With<HoveredCard>>,
     stack_recipe_query: Query<&OngoingRecipe, With<CardStack>>,
+    localizer: Res<Localizer>,
 ) {
     if let Some(hovered_card) = hovered_card_query.iter().next() {
         if let Ok(recipe) = stack_recipe_query.get(hovered_card.0) {
-            egui::Window::new(recipe.id.0)
+            let title_localization_id = RECIPE_TITLE_LOCALIZATION_PREFIX.to_string() + recipe.id.0;
+            // TODO (Wybe 2022-06-19): Cache this string?
+            let title = localizer.localize(&title_localization_id);
+
+            let seconds_left = (recipe.timer.duration() - recipe.timer.elapsed()).as_secs_f32();
+            let seconds_left_string = localizer.localize_with_args(
+                "ui_seconds_left_in_recipe",
+                &[("seconds", &format!("{:.1}", seconds_left))],
+            );
+
+            egui::Window::new(title)
                 .id(egui::Id::new("Recipe window"))
                 .fixed_size(RECIPE_INFO_SIZE)
                 .anchor(egui::Align2::LEFT_BOTTOM, RECIPE_INFO_WINDOW_OFFSET)
                 .collapsible(false)
                 .show(context.ctx_mut(), |ui| {
-                    ui.label(format!(
-                        "{:.1} seconds",
-                        (recipe.timer.duration() - recipe.timer.elapsed()).as_secs_f32()
-                    ));
+                    ui.label(seconds_left_string);
 
                     ui.allocate_space(ui.available_size())
                 });
@@ -165,7 +173,7 @@ fn pause_menu_ui(
                 sorted_language_identifiers.sort();
 
                 egui::ComboBox::from_label(localizer.localize("ui_pause_menu_language_label"))
-                    .selected_text(language_options[&selected])
+                    .selected_text(language_options[selected])
                     .show_ui(ui, |ui| {
                         for identifier in sorted_language_identifiers {
                             ui.selectable_value(
