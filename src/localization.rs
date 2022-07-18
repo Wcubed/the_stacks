@@ -64,6 +64,14 @@ impl Localizer {
     }
 
     pub fn localize_with_args(&self, id: &str, args: &[(&str, &str)]) -> String {
+        // TODO (Wybe 2022-06-19): Fall back on en-US if there is missing translations.
+        // TODO (Wybe 2022-06-19): Add a stage to the cargo make file that checks if all the
+        //      translation files have the values that the en-US.ftl file has. To make sure
+        //      there are no missing translations in other languages. (ignore the ones prefixed
+        //      with '-' of course.
+        //      and maybe also check that it uses the same arguments (e.g. `{$seconds}`) as the
+        //      english one uses, to prevent it mising information. The variables have to be
+        //      directly embedded into the translation entry (and not in referenced entries), so it should be checkable.
         let mut fluent_args = FluentArgs::new();
         for (key, value) in args {
             fluent_args.set(<&str>::clone(key), <&str>::clone(value));

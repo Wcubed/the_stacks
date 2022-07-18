@@ -10,6 +10,7 @@ use crate::stack::stack_utils::{
     CARD_DESCRIPTION_LOCALIZATION_PREFIX, CARD_TITLE_LOCALIZATION_PREFIX,
     CARD_VALUE_SPACING_FROM_CARD_EDGE,
 };
+use crate::ui::UiClaimsMouse;
 use crate::GameState;
 use bevy::math::{const_vec2, const_vec3};
 use bevy::prelude::*;
@@ -366,10 +367,11 @@ pub fn stack_mouse_drag_system(
 pub fn card_mouse_pickup_system(
     mut commands: Commands,
     mouse_button: Res<Input<MouseButton>>,
+    ui_claims_mouse: Res<UiClaimsMouse>,
     hovered_card_query: Query<(Entity, &Parent, &HoveredCard, &GlobalTransform), With<Card>>,
     stacks: Query<(&CardStack, Option<&OngoingRecipe>)>,
 ) {
-    if mouse_button.just_pressed(MouseButton::Left) {
+    if mouse_button.just_pressed(MouseButton::Left) && !ui_claims_mouse.0 {
         for (card_entity, stack_root, hovered_card_component, global_transform) in
             hovered_card_query.iter()
         {
@@ -614,6 +616,7 @@ pub fn card_hover_system(
     stack_dragged_query: Query<(&StackRelativeDragPosition, &CardStack)>,
     mut card_hover_overlay_query: Query<&mut Visibility, With<IsCardHoverOverlay>>,
     card_visual_size: Res<CardVisualSize>,
+    ui_claims_mouse: Res<UiClaimsMouse>,
 ) {
     if let Some(mouse_world_pos) = maybe_mouse_world_pos.0 {
         let mut hovered_card = None;
@@ -622,7 +625,7 @@ pub fn card_hover_system(
             // User is dragging a stack. The root is the card they are hovering.
             let (_, global_transform, _) = card_query.get(cards_in_stack[0]).unwrap();
             hovered_card = Some((cards_in_stack[0], relative_drag_pos.0, global_transform));
-        } else {
+        } else if !ui_claims_mouse.0 {
             // User isn't dragging a stack. See which card they are hovering.
 
             for (entity, transform, _) in card_query.iter() {

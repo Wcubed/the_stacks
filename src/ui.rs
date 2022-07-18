@@ -32,8 +32,10 @@ pub struct UiPlugin;
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugin(EguiPlugin)
+            .insert_resource(UiClaimsMouse(false))
             .add_system_set(
                 SystemSet::on_update(GameState::Run)
+                    .with_system(ui_mouse_claim_system)
                     .with_system(card_info_ui)
                     .with_system(card_crafting_info_ui)
                     .with_system(game_speed_ui)
@@ -41,6 +43,15 @@ impl Plugin for UiPlugin {
             )
             .add_system_set(SystemSet::on_update(GameState::PauseMenu).with_system(pause_menu_ui));
     }
+}
+
+pub struct UiClaimsMouse(pub bool);
+
+/// Keeps track of whether the ui is currently claiming the mouse or not.
+/// If the ui is not claiming the mouse, the game world can use it.
+/// TODO (Wybe 2022-07-18): Add a similar system for the keyboard input.
+fn ui_mouse_claim_system(mut context: ResMut<EguiContext>, mut claims_mouse: ResMut<UiClaimsMouse>) {
+    claims_mouse.0 = context.ctx_mut().wants_pointer_input();
 }
 
 fn card_info_ui(

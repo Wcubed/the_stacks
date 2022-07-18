@@ -3,6 +3,7 @@ use crate::GameState;
 use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 use bevy::prelude::*;
 use bevy::render::camera::Camera2d;
+use crate::ui::UiClaimsMouse;
 
 /// Mouse wheels are less precise than touchpads, so we scale the zoom when using a scroll wheel.
 const MOUSE_WHEEL_ZOOM_FACTOR: f32 = 0.1;
@@ -58,6 +59,7 @@ pub fn camera_drag_system(
     mouse_button: Res<Input<MouseButton>>,
     mut last_pos: Local<Option<Vec2>>,
     dragged_card_query: Query<&StackRelativeDragPosition>,
+    ui_claims_mouse: Res<UiClaimsMouse>,
 ) {
     if !dragged_card_query.is_empty() {
         // The user is dragging cards, so we shouldn't be dragging the camera, otherwise that
@@ -71,7 +73,7 @@ pub fn camera_drag_system(
     };
     let delta = current_pos - last_pos.unwrap_or(current_pos);
 
-    if mouse_button.pressed(MouseButton::Left) || mouse_button.pressed(MouseButton::Right) {
+    if (mouse_button.pressed(MouseButton::Left) || mouse_button.pressed(MouseButton::Right)) && !ui_claims_mouse.0 {
         let (mut camera_transform, projection) = camera_query.single_mut();
 
         let scaling = Vec2::new(
